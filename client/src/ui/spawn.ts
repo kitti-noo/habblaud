@@ -131,10 +131,13 @@ export class SpawnPanel {
   private selected = '';
   private typing = false;
   private files: PendingFile[] = [];
+  private readonly browser: FolderBrowserView;
 
   constructor(private readonly ctx: UiContext) {
     this.folderList = h('div', { class: 'ui-spawn__folders', role: 'radiogroup', attrs: { 'aria-label': tr('Projetos recentes') } });
     this.otherBtn = h('button', { class: 'ui-spawn__other', type: 'button', on: { click: () => this.showOther(true) } }, tr('+ Outra pasta'));
+    this.browser = new FolderBrowserView((path) => this.choose(path));
+    const browseBtn = h('button', { class: 'ui-spawn__other ui-spawn__browse-btn', type: 'button', on: { click: () => this.browser.toggle(this.typing ? this.folder.value.trim() : this.selected) } }, tr('📁 Procurar pasta…'));
     this.folder = h('input', {
       class: 'ui-rename__input ui-spawn__path',
       type: 'text',
@@ -190,7 +193,8 @@ export class SpawnPanel {
         { class: 'ui-set-group ui-spawn__body' },
         h('p', { class: 'ui-spawn__label', attrs: { id: 'ui-spawn-folders-label' }, text: tr('Projeto') }),
         this.folderList,
-        this.otherBtn,
+        h('div', { class: 'ui-spawn__pick' }, this.otherBtn, browseBtn),
+        this.browser.el,
         this.folder,
         h('label', { class: 'ui-spawn__label', attrs: { for: 'ui-spawn-prompt' }, text: tr('Pedido') }),
         this.prompt,
@@ -215,9 +219,18 @@ export class SpawnPanel {
     }
   }
 
+  /** Abre já com a pasta escolhida (botão "+" de uma sala na barra lateral). */
+  openFor(anchor: HTMLElement, folder: string): void {
+    if (this.isOpen && this.anchor === anchor) return this.hide();
+    if (this.isOpen) this.hide();
+    this.toggle(anchor);
+    this.choose(folder);
+  }
+
   toggle(anchor: HTMLElement): void {
     this.anchor = anchor;
     if (this.isOpen) return this.hide();
+    this.browser.close();
     // Primeiro com o que o escritório já sabe; a lista do servidor (histórico) chega logo depois.
     if (!this.folders.length) this.setFolders(spawnFolders(this.ctx.store.snapshot).map((path) => ({ path, name: path.split(/[\\/]/).pop() || path, lastAt: 0 })));
     void this.loadFolders();
@@ -286,6 +299,13 @@ export class SpawnPanel {
     );
     if (!this.folders.length) this.showOther(true);
     else if (!known && this.selected && !this.typing) this.showOther(true, this.selected);
+  }
+
+  /** Escolhe uma pasta: a da lista, se estiver nela; senão, no campo de caminho. */
+  private choose(path: string): void {
+    if (this.folders.some((f) => f.path === path)) this.pick(path);
+    else this.showOther(true, path);
+    this.browser.close();
   }
 
   private pick(path: string): void {
@@ -397,5 +417,139 @@ export class SpawnPanel {
       this.busy = false;
       this.submitBtn.disabled = false;
     }
+  }
+}
+
+interface BrowseEntry {
+  name: string;
+  path: string;
+  project?: boolean;
+  hidden?: boolean;
+}
+
+interface BrowseListing {
+  path: string;
+  parent?: string;
+  home: string;
+  entries: BrowseEntry[];
+  truncated?: boolean;
+}
+
+/** Caminho em pedaços clicáveis ("/", "Users", "voce", ...). */
+export function crumbs(path: string): Array<{ name: string; path: string }> {
+  const win = /^[A-Za-z]:[\\/]/.test(path);
+  const sep = win ? '\\' : '/';
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  const out: Array<{ name: string; path: string }> = win ? [] : [{ name: '/', path: '/' }];
+  let acc = '';
+  for (const [i, part] of parts.entries()) {
+    acc = win ? (i === 0 ? `${part}${sep}` : `${acc.replace(/[\\/]$/, '')}${sep}${part}`) : `${acc}/${part}`;
+    out.push({ name: part, path: acc });
+  }
+  return out;
+}
+
+/** Navegador de pastas do computador (GET /api/spawn/browse; no Docker, quem lista é o auxiliar do host). */
+export class FolderBrowserView {
+  readonly el: HTMLElement;
+  private readonly crumbsEl: HTMLElement;
+  private readonly list: HTMLElement;
+  private readonly status: HTMLElement;
+  private readonly useBtn: HTMLButtonElement;
+  private readonly hiddenToggle: HTMLInputElement;
+  private readonly filter: HTMLInputElement;
+  private listing?: BrowseListing;
+  private seq = 0;
+
+  constructor(private readonly onChoose: (path: string) => void) {
+    this.crumbsEl = h('div', { class: 'ui-browse__crumbs', attrs: { 'aria-label': tr('Caminho') } });
+    this.filter = h('input', { class: 'ui-rename__input ui-browse__filter', type: 'search', attrs: { placeholder: tr('Filtrar pastas'), spellcheck: 'false', autocomplete: 'off', 'aria-label': tr('Filtrar pastas') } });
+    this.filter.addEventListener('input', () => this.render());
+    for (const ev of ['keydown', 'keyup'] as const) this.filter.addEventListener(ev, (e) => e.stopPropagation());
+    this.hiddenToggle = h('input', { type: 'checkbox' });
+    this.hiddenToggle.addEventListener('change', () => this.render());
+    this.list = h('ul', { class: 'ui-browse__list', role: 'listbox', attrs: { 'aria-label': tr('Pastas') } });
+    this.status = h('p', { class: 'ui-rename__hint ui-browse__status', attrs: { role: 'status', 'aria-live': 'polite' } });
+    this.useBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow ui-browse__use', type: 'button', on: { click: () => this.listing && this.onChoose(this.listing.path) } }, tr('Usar esta pasta'));
+    const upBtn = h('button', { class: 'ui-btn ui-browse__nav', type: 'button', attrs: { title: tr('Pasta de cima') }, on: { click: () => this.listing?.parent && void this.go(this.listing.parent) } }, '↑');
+    const homeBtn = h('button', { class: 'ui-btn ui-browse__nav', type: 'button', attrs: { title: tr('Pasta pessoal') }, on: { click: () => void this.go('') } }, '~');
+    this.el = h(
+      'div',
+      { class: 'ui-browse', hidden: true },
+      h('div', { class: 'ui-browse__bar' }, upBtn, homeBtn, this.crumbsEl),
+      h('div', { class: 'ui-browse__bar' }, this.filter, h('label', { class: 'ui-browse__hidden' }, this.hiddenToggle, h('span', { text: tr('Ocultas') }))),
+      this.list,
+      this.status,
+      this.useBtn,
+    );
+  }
+
+  get isOpen(): boolean {
+    return !this.el.hidden;
+  }
+
+  toggle(start: string): void {
+    if (this.isOpen) return this.close();
+    setHidden(this.el, false);
+    void this.go(/^(\/|[A-Za-z]:[\\/])/.test(start) ? start : '');
+  }
+
+  close(): void {
+    setHidden(this.el, true);
+  }
+
+  private async go(path: string): Promise<void> {
+    const n = ++this.seq;
+    setText(this.status, tr('Lendo as pastas…'));
+    this.status.classList.remove('is-error');
+    try {
+      const listing = await api<BrowseListing>(`/api/spawn/browse?path=${encodeURIComponent(path)}`);
+      if (n !== this.seq) return;
+      this.listing = listing;
+      this.filter.value = '';
+      setText(this.status, listing.truncated ? tr('Muitas pastas: mostrando as primeiras {0}.', [listing.entries.length]) : '');
+      this.render();
+    } catch (err) {
+      if (n !== this.seq) return;
+      // Pasta que sumiu (ou caminho digitado errado): volta para a pasta pessoal uma vez.
+      if (path && !this.listing) return void this.go('');
+      setText(this.status, (err as Error).message);
+      this.status.classList.add('is-error');
+    }
+  }
+
+  private render(): void {
+    const l = this.listing;
+    if (!l) return;
+    this.crumbsEl.replaceChildren(
+      ...crumbs(l.path).map((c, i, all) =>
+        i === all.length - 1
+          ? h('span', { class: 'ui-browse__crumb is-current', text: c.name })
+          : h('button', { class: 'ui-browse__crumb', type: 'button', on: { click: () => void this.go(c.path) } }, c.name),
+      ),
+    );
+    this.crumbsEl.scrollLeft = this.crumbsEl.scrollWidth;
+    const q = this.filter.value.trim().toLowerCase();
+    const shown = l.entries.filter((e) => (this.hiddenToggle.checked || !e.hidden) && (!q || e.name.toLowerCase().includes(q)));
+    this.list.replaceChildren(
+      ...shown.map((e) => {
+        const row = h(
+          'li',
+          { class: `ui-browse__item${e.project ? ' is-project' : ''}`, role: 'option', tabIndex: 0, attrs: { title: e.path } },
+          h('span', { class: 'ui-browse__icon', attrs: { 'aria-hidden': 'true' }, text: e.project ? '📦' : '📁' }),
+          h('span', { class: 'ui-browse__name', text: e.name }),
+          e.project ? h('span', { class: 'ui-browse__tag', text: tr('projeto') }) : null,
+          h('button', { class: 'ui-browse__pick', type: 'button', attrs: { title: tr('Usar esta pasta') }, on: { click: (ev: Event) => { ev.stopPropagation(); this.onChoose(e.path); } } }, tr('Usar')),
+        );
+        row.addEventListener('click', () => void this.go(e.path));
+        row.addEventListener('keydown', (ev: KeyboardEvent) => {
+          ev.stopPropagation();
+          if (ev.key === 'Enter') void this.go(e.path);
+        });
+        return row;
+      }),
+    );
+    if (!shown.length) this.list.append(h('li', { class: 'ui-browse__empty', text: q ? tr('Nenhuma pasta com esse nome.') : tr('Sem subpastas.') }));
+    setText(this.useBtn, tr('Usar {0}', [shortPath(l.path)]));
   }
 }

@@ -12,9 +12,11 @@ import { officeIsEmpty } from './overlays';
 import { createAgentRow, updateAgentRow } from './rows';
 import { createAccountChip, createProgress, updateAccountChip, updateProgress } from './widgets';
 import { tr } from '../../../shared/i18n';
+import { access } from '../net/access';
 
 interface RoomRefs {
   head: HTMLButtonElement;
+  add: HTMLButtonElement;
   name: HTMLElement;
   count: HTMLElement;
   path: HTMLElement;
@@ -226,8 +228,15 @@ export class Sidebar implements UiComponent {
     } catch {
       // Sem tema: mantém a cor padrão do CSS.
     }
+    // "+": Novo agente já neste projeto (ui/spawn.ts).
+    const add = h('button', { class: 'ui-room__add', type: 'button', hidden: true, text: '+' });
+    add.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const room = this.ctx.store.snapshot?.rooms.find((r) => r.id === g.room.id);
+      if (room?.path) this.ctx.spawnIn?.(room.path, add);
+    });
     const agentsEl = h('ul', { class: 'ui-nodes' });
-    const section = h('section', { class: 'ui-room', role: 'listitem' }, head, agentsEl);
+    const section = h('section', { class: 'ui-room', role: 'listitem' }, head, add, agentsEl);
     const accs = new KeyedList<AccountInfo | string>(accsEl, {
       animate: false,
       key: (a) => (typeof a === 'string' ? a : a.id),
@@ -239,7 +248,7 @@ export class Sidebar implements UiComponent {
       create: (n) => this.createNode(n),
       update: (el, n) => this.updateNode(el, n),
     });
-    this.roomRefs.set(section, { head, name, count, path, accs, tasks, tasksBar, tasksText, nodes });
+    this.roomRefs.set(section, { head, add, name, count, path, accs, tasks, tasksBar, tasksText, nodes });
     return section;
   }
 
@@ -251,6 +260,10 @@ export class Sidebar implements UiComponent {
     setText(r.count, String(present));
     setTitle(r.count, plural(present, tr('agente'), tr('agentes')));
     setText(r.path, shortPath(g.room.path));
+    const canAdd = !!this.ctx.spawnIn && access().spawn && /^(\/|[A-Za-z]:[\\/])/.test(g.room.path ?? '') && !g.room.id.startsWith('demo:');
+    setHidden(r.add, !canAdd);
+    setTitle(r.add, tr('Novo agente em {0}', [g.room.name]));
+    setAttr(r.add, 'aria-label', tr('Novo agente em {0}', [g.room.name]));
     setTitle(r.head, tr('{0}\nClique para ver a sala', [g.room.path]));
     setAttr(r.head, 'aria-label', tr('Sala {0}, {1}', [g.room.name, plural(present, tr('agente'), tr('agentes'))]));
     r.accs.sync(g.accounts.map((id) => this.ctx.account(id) ?? id));

@@ -276,7 +276,9 @@ Install a certificate › CA certificate), checking the fingerprint the setup sh
 - **New agent** (the **+** button): starts a Claude Code session in the background on the computer (`claude --bg`, in
   the chosen folder), which shows up in the office and receives messages and permission requests through Habblaud. In
   a folder Claude Code doesn't trust yet, it opens the Claude app's new-session screen filled in, and you press Enter
-  there. **It comes turned off:** it needs `HABBLAUD_PTY=1` (the same opt-in as the
+  there. Pick the project from the recent list, type a path, browse the computer's folders (**📁 Browse folders…**,
+  folder names only; in Docker the listing comes from `npm run codex:bridge`) or use the **+** on a project in the side
+  panel to start a new agent already in it. **It comes turned off:** it needs `HABBLAUD_PTY=1` (the same opt-in as the
   [interactive terminal](#interactive-terminal-take-over-new-session-and-end); in Docker, put it in `.env` and keep
   `npm run codex:bridge` running on the computer) and, from the phone, `spawn` in `HABBLAUD_REMOTE_ALLOW` too.
 - **Dictation** (in New agent and in the message box): needs `whisper-cli` and `ffmpeg` (`brew install whisper-cpp

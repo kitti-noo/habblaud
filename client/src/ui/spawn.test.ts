@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, formatBytes, shortPath, spawnFolders } from './spawn';
+import { ago, crumbs, formatBytes, shortPath, spawnFolders } from './spawn';
 import { insertDictation, pickMimeType } from './dictation';
 
 describe('spawnFolders', () => {
@@ -46,5 +46,16 @@ describe('ditado no campo', () => {
     expect(pickMimeType((t) => t.startsWith('audio/webm'))).toBe('audio/webm;codecs=opus');
     expect(pickMimeType(() => false)).toBeUndefined();
     expect(pickMimeType(() => { throw new Error('x'); })).toBeUndefined();
+  });
+});
+
+describe('crumbs', () => {
+  it('splits posix and windows paths', () => {
+    expect(crumbs('/Users/me')).toEqual([
+      { name: '/', path: '/' },
+      { name: 'Users', path: '/Users' },
+      { name: 'me', path: '/Users/me' },
+    ]);
+    expect(crumbs('C:\\Users\\me').map((c) => c.path)).toEqual(['C:\\', 'C:\\Users', 'C:\\Users\\me']);
   });
 });

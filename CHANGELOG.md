@@ -10,6 +10,13 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Novo agente: procurar a pasta do projeto e “+” em cada projeto.** No Novo agente, **📁 Procurar pasta…** navega
+  pelas pastas do computador (só nomes de pastas; as que têm cara de projeto ficam marcadas) e escolhe com um clique,
+  sem digitar o caminho. No Docker quem lista as pastas é o `npm run codex:bridge`. Cada projeto do painel lateral ganha
+  um **+** que abre o Novo agente já naquela pasta.
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido

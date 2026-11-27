@@ -30,6 +30,7 @@ import { checkFile, insideKnownFolder, tempRoots } from '../server/deliveries/fi
 import { discoverClaudeDirs } from '../server/accounts/detect';
 import { HOST_WAIT_MS } from '../server/host-wait';
 import { readFileSync } from 'node:fs';
+import { listFolders, type BrowseResult } from '../server/spawn/browse';
 
 export const DEFAULT_PORT = 4747;
 /** Intervalo entre as rodadas. */
@@ -321,6 +322,32 @@ export async function filesRound(
   return { state: 'ok', results: results.map(({ id, ok, error }) => ({ id, ok, ...(error ? { error } : {}) })) };
 }
 
+/**
+ * Procurar pasta (Novo agente): busca as pastas pedidas (POST /api/host/browse/poll), lista só as subpastas de cada uma
+ * (nunca arquivos nem conteúdo) e devolve em /api/host/browse/ack. Nunca lança.
+ */
+export async function browseRound(post: Post, list: (path: string) => BrowseResult = listFolders, opts: { wait?: boolean } = {}): Promise<RoundResult> {
+  const polled = await post(`/api/host/browse/poll${opts.wait ? '?wait=1' : ''}`, {});
+  if (!polled) return { state: 'down' };
+  const pending = rec(polled.json)?.browse;
+  if (polled.status !== 200 || !Array.isArray(pending)) return { state: 'refused', status: polled.status };
+  const results: Array<Record<string, unknown>> = [];
+  for (const raw of pending) {
+    const r = rec(raw);
+    const id = typeof r?.id === 'string' ? r.id : '';
+    if (!id) continue;
+    let out: BrowseResult;
+    try {
+      out = list(typeof r?.path === 'string' ? r.path : '');
+    } catch {
+      out = { error: tr('o computador não listou a pasta'), status: 404 };
+    }
+    results.push('listing' in out ? { id, ok: true, listing: out.listing } : { id, ok: false, error: out.error, status: out.status });
+  }
+  if (results.length) await post('/api/host/browse/ack', { results });
+  return { state: 'ok', results: results.map((x) => ({ id: String(x.id), ok: x.ok === true })) };
+}
+
 /** Repete uma rodada com espera: fora do ar, de 2 em 2 s; recusada (recurso desligado), a cada minuto. */
 async function waitLoop(roundFn: () => Promise<RoundResult>): Promise<never> {
   for (;;) {
@@ -364,6 +391,7 @@ async function main(): Promise<void> {
     const roots = [...tempRoots(), attachmentsRoot()];
     const inside = (p: string) => insideKnownFolder(p, { accountDirs, roots });
     void waitLoop(() => filesRound(waitPost, log, undefined, undefined, { inside, wait: true }));
+    void waitLoop(() => browseRound(waitPost, undefined, { wait: true }));
     if (transcribe) {
       const t = transcribe;
       void waitLoop(() => dictationRound(waitPost, t, log, { wait: true }));

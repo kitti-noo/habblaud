@@ -45,6 +45,7 @@ import { createCliRunner, createOpener, SpawnService } from './spawn/spawn';
 import { runnableClaudeBin } from './claude-bin';
 import { AttachmentStore } from './spawn/attachments';
 import { recentFolders } from './spawn/folders';
+import { FolderBrowser } from './spawn/browse';
 import { isDemoId } from '../shared/timeline';
 import { DictationService } from './dictation/dictation';
 import { createWhisperTranscriber, findWhisper } from './dictation/whisper';
@@ -260,6 +261,8 @@ const spawnBin = config.inDocker ? undefined : runnableClaudeBin(process.env);
 const spawn = spawnOn
   ? new SpawnService(config.inDocker ? { attachments } : { opener: createOpener(), cli: spawnBin ? createCliRunner(spawnBin) : undefined, attachments })
   : undefined;
+// Procurar pasta (Novo agente): só nomes de pastas; no Docker quem lista é o auxiliar do host.
+const browser = spawnOn ? new FolderBrowser({ direct: !config.inDocker }) : undefined;
 // Ditado: no Docker quem transcreve é o auxiliar do host; no Node, o servidor, se achar o Whisper local.
 const whisper = config.messages && !config.inDocker ? findWhisper() : undefined;
 const dictation = config.messages
@@ -364,6 +367,7 @@ const api = createApiHandler({
   dictation,
   deliveries,
   files: deliveryFiles,
+  browser,
   spawnFolders: async () => {
     const snap = hub.current();
     const last = new Map<string, number>();

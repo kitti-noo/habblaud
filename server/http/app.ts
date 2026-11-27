@@ -18,6 +18,7 @@ import { tr } from '../../shared/i18n';
 import type { SpawnService } from '../spawn/spawn';
 import { ATTACHMENT_BODY_MAX, parseAttachment, type AttachmentStore } from '../spawn/attachments';
 import type { SpawnFolder } from '../spawn/folders';
+import type { FolderBrowser } from '../spawn/browse';
 import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
@@ -67,6 +68,8 @@ export interface ApiDeps {
   spawn?: SpawnService;
   /** Pastas sugeridas no "Novo agente" (GET /api/spawn/folders; spawn/folders.ts): projetos recentes. */
   spawnFolders?: () => Promise<SpawnFolder[]>;
+  /** "Procurar pasta" do Novo agente (GET /api/spawn/browse; /api/host/browse/* para o auxiliar do host; spawn/browse.ts). */
+  browser?: FolderBrowser;
   /** Anexos do "Novo agente" (POST /api/spawn/attachments; spawn/attachments.ts). */
   attachments?: AttachmentStore;
   /** Ditado (/api/dictation e, para o auxiliar do host, /api/host/dictation/*; dictation/dictation.ts). */
@@ -498,6 +501,15 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       else if (path === '/api/spawn/folders') {
         if (!isRead) methodNotAllowed(res, 'GET');
         else (deps.spawnFolders ?? (async () => []))().then((folders) => sendJson(res, 200, { folders }), (err) => fail(res, err));
+      } else if (path === '/api/spawn/browse') {
+        const browser = deps.browser;
+        if (!isRead) methodNotAllowed(res, 'GET');
+        else if (!browser) sendJson(res, 403, { error: tr('procurar pastas desligado') });
+        else
+          browser.browse(url.searchParams.get('path') ?? '').then(
+            (r) => ('listing' in r ? sendJson(res, 200, r.listing) : sendJson(res, r.status, { error: r.error })),
+            (err) => fail(res, err),
+          );
       } else if (path === '/api/spawn/attachments') {
         const store = deps.attachments;
         if (method !== 'POST') methodNotAllowed(res, 'POST');
@@ -606,6 +618,26 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         readJson(req, 512 * 1024)
           .then((body) => {
             dictation.ack(body);
+            sendJson(res, 200, { ok: true });
+          })
+          .catch((err) => fail(res, err));
+      }
+      return true;
+    }
+    if (path === '/api/host/browse/poll' || path === '/api/host/browse/ack') {
+      // Só o auxiliar do host, pela porta local (nunca pela remota); fora do Docker, só pelo loopback.
+      const browser = deps.browser;
+      if (method !== 'POST') methodNotAllowed(res, 'POST');
+      else if (!browser) sendJson(res, 403, { error: tr('procurar pastas desligado') });
+      else if (!trusted(req) || (!deps.inDocker && !isLoopbackAddress(req.socket.remoteAddress))) {
+        sendJson(res, 403, { error: denied(req, tr('só o auxiliar do próprio computador')) });
+      } else if (path === '/api/host/browse/poll') {
+        req.resume();
+        hostWait(res, url, (ms, signal) => browser.pollWait(ms, signal)).then((list) => list && sendJson(res, 200, { browse: list }), (err) => fail(res, err));
+      } else {
+        readJson(req, 2 * 1024 * 1024)
+          .then((body) => {
+            browser.ack(body);
             sendJson(res, 200, { ok: true });
           })
           .catch((err) => fail(res, err));
