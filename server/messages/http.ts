@@ -12,7 +12,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpError, readJson, sendJson } from '../http/app';
 import { InvalidRequest, MAX_OPEN, type MessageRegistry } from './registry';
 import { tr } from '../../shared/i18n';
-import { messageWithAttachments } from '../spawn/attachments';
+import { attachmentsReserve, messageWithAttachments } from '../spawn/attachments';
+import { MAX_TEXT } from './registry';
 
 export interface MessageRouteOptions {
   /**
@@ -20,6 +21,8 @@ export interface MessageRouteOptions {
    * texto. Ausente = mensagens sem anexos.
    */
   attach?: (ids: unknown) => Promise<{ paths: string[] } | { error: string; status: number }>;
+  /** Os nomes dos anexos (sem tirá-los), para conferir o tamanho da mensagem antes de gravar. */
+  attachmentNames?: (ids: unknown) => string[] | undefined;
 }
 
 const ITEM = /^\/api\/messages\/([^/]+)$/;
@@ -44,9 +47,15 @@ export function createMessageRoutes(registry: MessageRegistry, opts: MessageRout
       if (!opts.attach) return sendJson(res, 400, { error: tr('anexos desligados') });
       const b = body as Record<string, unknown>;
       if (typeof b.text !== 'string') return sendJson(res, 400, { error: 'esperado {agentId, text}' });
-      // Antes de gravar: o agente precisa poder receber (senão os arquivos ficariam no disco à toa).
+      // Antes de gravar (senão os arquivos ficariam no disco à toa): o agente precisa poder receber e a mensagem, com a
+      // lista dos caminhos no fim, precisa caber.
       const problem = registry.cannotReceive(b.agentId);
       if (problem) return sendJson(res, problem.status, { error: problem.error });
+      const names = opts.attachmentNames?.(ids);
+      if (opts.attachmentNames && !names) return sendJson(res, 400, { error: tr('um anexo expirou: anexe de novo') });
+      if (names && b.text.length + attachmentsReserve(names) > MAX_TEXT) {
+        return sendJson(res, 400, { error: tr('a mensagem com os anexos passa de 20.000 caracteres: encurte o texto') });
+      }
       const w = await opts.attach(ids);
       if ('error' in w) return sendJson(res, w.status, { error: w.error });
       body = { ...b, text: messageWithAttachments(b.text, w.paths) };

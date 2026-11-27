@@ -402,7 +402,7 @@ export class FolderBrowserView {
     for (const ev of ['keydown', 'keyup'] as const) this.filter.addEventListener(ev, (e) => e.stopPropagation());
     this.hiddenToggle = h('input', { type: 'checkbox' });
     this.hiddenToggle.addEventListener('change', () => this.render());
-    this.list = h('ul', { class: 'ui-browse__list', role: 'listbox', attrs: { 'aria-label': tr('Pastas') } });
+    this.list = h('ul', { class: 'ui-browse__list', attrs: { 'aria-label': tr('Pastas') } });
     this.status = h('p', { class: 'ui-rename__hint ui-browse__status', attrs: { role: 'status', 'aria-live': 'polite' } });
     this.useBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow ui-browse__use', type: 'button', on: { click: () => this.listing && this.onChoose(this.listing.path) } }, tr('Usar esta pasta'));
     const upBtn = h('button', { class: 'ui-btn ui-browse__nav', type: 'button', attrs: { title: tr('Pasta de cima') }, on: { click: () => this.listing?.parent && void this.go(this.listing.parent) } }, '↑');
@@ -465,20 +465,24 @@ export class FolderBrowserView {
     this.crumbsEl.scrollLeft = this.crumbsEl.scrollWidth;
     const q = this.filter.value.trim().toLowerCase();
     const shown = l.entries.filter((e) => (this.hiddenToggle.checked || !e.hidden) && (!q || e.name.toLowerCase().includes(q)));
+    // Cada linha: o nome abre a pasta (Enter/clique), "Usar" escolhe; setas sobem e descem entre as pastas.
     this.list.replaceChildren(
       ...shown.map((e) => {
-        const row = h(
-          'li',
-          { class: `ui-browse__item${e.project ? ' is-project' : ''}`, role: 'option', tabIndex: 0, attrs: { title: e.path } },
+        const open = h(
+          'button',
+          { class: 'ui-browse__open', type: 'button', attrs: { title: e.path, 'aria-label': tr('Abrir {0}', [e.name]) }, on: { click: () => void this.go(e.path) } },
           h('span', { class: 'ui-browse__icon', attrs: { 'aria-hidden': 'true' }, text: e.project ? '📦' : '📁' }),
           h('span', { class: 'ui-browse__name', text: e.name }),
           e.project ? h('span', { class: 'ui-browse__tag', text: tr('projeto') }) : null,
-          h('button', { class: 'ui-browse__pick', type: 'button', attrs: { title: tr('Usar esta pasta') }, on: { click: (ev: Event) => { ev.stopPropagation(); this.onChoose(e.path); } } }, tr('Usar')),
         );
-        row.addEventListener('click', () => void this.go(e.path));
+        const pick = h('button', { class: 'ui-browse__pick', type: 'button', attrs: { 'aria-label': tr('Usar {0}', [e.name]) }, on: { click: () => this.onChoose(e.path) } }, tr('Usar'));
+        const row = h('li', { class: `ui-browse__item${e.project ? ' is-project' : ''}` }, open, pick);
         row.addEventListener('keydown', (ev: KeyboardEvent) => {
           ev.stopPropagation();
-          if (ev.key === 'Enter') void this.go(e.path);
+          if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+          ev.preventDefault();
+          const next = (ev.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling)?.querySelector<HTMLElement>('.ui-browse__open');
+          next?.focus();
         });
         return row;
       }),

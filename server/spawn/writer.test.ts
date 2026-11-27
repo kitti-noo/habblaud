@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { writeAttachments } from './attachments';
-import { AttachmentWriter } from './writer';
+import { AttachmentWriter, RESEND_MS } from './writer';
 import { attachmentsRound } from '../../scripts/codex-bridge';
 
 const file = (name: string, text: string) => ({ name, type: 'text/plain', data: Buffer.from(text) });
@@ -25,9 +25,26 @@ describe('AttachmentWriter', () => {
     const pending = w.write([file('b.txt', 'hello')]);
     const [job] = w.poll();
     expect(job.files).toEqual([{ name: 'b.txt', type: 'text/plain', data: Buffer.from('hello').toString('base64') }]);
-    expect(released).toBe(8);
+    // Fica na memória até a confirmação (a rodada pode cair no caminho).
+    expect(released).toBe(3);
     w.ack({ results: [{ id: job.id, ok: true, paths: ['/h/b.txt'] }] });
     expect(await pending).toEqual({ paths: ['/h/b.txt'] });
+    expect(released).toBe(8);
+  });
+
+  it('hands the job out again when the helper never confirmed it', async () => {
+    let now = 1_000;
+    const w = new AttachmentWriter({ now: () => now });
+    w.poll();
+    const pending = w.write([file('a.txt', 'x')]);
+    const [first] = w.poll();
+    expect(w.poll()).toEqual([]);
+    now += RESEND_MS;
+    const [again] = w.poll();
+    expect(again.id).toBe(first.id);
+    w.ack({ results: [{ id: first.id, ok: true, paths: ['/h/a.txt'] }] });
+    w.ack({ results: [{ id: first.id, ok: true, paths: ['/h/a-2.txt'] }] });
+    expect(await pending).toEqual({ paths: ['/h/a.txt'] });
   });
 
   it('a wrong number of paths is a failure; and it times out', async () => {

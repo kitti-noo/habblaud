@@ -904,6 +904,9 @@ mod/      o mod do Habblaud e os plugins de permissões e de mensagens (plugins 
 | `/api/messages…` e `/api/mod/inbox…` | Mandar mensagens: a página deixa a mensagem na fila e acompanha a entrega; o plugin `habblaud-mensagens` a busca, entrega à sessão e confirma. Só com acesso local. |
 | `POST /api/codex/events` | Eventos dos hooks do Codex (sessão aberta, ferramenta, aprovação, fim do turno). Só com acesso local. |
 | `/api/codex/bridge/poll` e `/ack` | O `npm run codex:bridge` busca as mensagens para o Codex e confirma a entrega. Só com acesso local. |
+| `GET /api/spawn/browse?path=` | Procurar pasta (Novo agente): as subpastas de uma pasta, só os nomes. Mesma trava do Novo agente. |
+| `POST /api/attachments` | Um anexo da caixa de mensagem (`{name, type, data}` em base64); o `POST /api/messages` leva os ids em `attachments`. Mesma trava das mensagens. |
+| `/api/host/browse/*`, `/api/host/attachments/*` | No Docker, o `npm run codex:bridge` lista as pastas e grava os anexos no computador. Só com acesso local. |
 
 Mais detalhes do servidor em [`server/README.md`](server/README.md).
 
@@ -1001,7 +1004,11 @@ das contas (letra, e-mail, organização) são lidos no host pelo `docker:up` e 
   escreveu, na pasta que você escolher — vale o mesmo aviso do terminal interativo. Os anexos são gravados em
   `~/.habblaud/attachments/` (pasta 700, arquivos 600). No Docker, quem começa as sessões é o auxiliar do host
   (`npm run codex:bridge`), que também só lê os arquivos das entregas de pastas de projeto conhecidas (as que o Claude
-  Code tem em `<conta>/projects`), da pasta temporária e dos anexos.
+  Code tem em `<conta>/projects`), da pasta temporária e dos anexos. O **Procurar pasta** mostra os nomes das pastas do
+  computador (nunca arquivos nem o conteúdo deles) a quem pode usar o Novo agente.
+- **Anexos nas mensagens:** com as mensagens ligadas (sem precisar do `HABBLAUD_PTY`), os arquivos anexados na caixa de
+  mensagem também são gravados em `~/.habblaud/attachments/` (pasta 700, arquivos 600) e os caminhos vão no fim da
+  mensagem. No Docker quem grava é o auxiliar do host (`npm run codex:bridge`); sem ele, anexar responde `503`.
 - **Editor de personagem, só local:** salvar ou voltar ao sorteio muda o escritório e grava em `names.json`, então
   segue a mesma trava do terminal (bind local, `Host` local, nada de proxies ou túneis): sem ela, o lápis não aparece
   e o servidor responde `403`. As mudanças exigem JSON e origem local. `HABBLAUD_TERMINAL=0` desliga junto.

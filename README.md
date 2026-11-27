@@ -907,6 +907,9 @@ mod/      o mod do Habblaud e os plugins de permissões e de mensagens (plugins 
 | `/api/messages…` and `/api/mod/inbox…` | Sending messages: the page puts the message in the queue and follows its delivery; the `habblaud-mensagens` plugin fetches it, delivers it to the session and confirms. Local access only. |
 | `POST /api/codex/events` | Events from the Codex hooks (session opened, tool, approval, end of turn). Local access only. |
 | `/api/codex/bridge/poll` and `/ack` | `npm run codex:bridge` fetches the messages for Codex and confirms delivery. Local access only. |
+| `GET /api/spawn/browse?path=` | Browse folders (New agent): the subfolders of a folder, names only. Same lock as New agent. |
+| `POST /api/attachments` | An attachment for the message box (`{name, type, data}` in base64); `POST /api/messages` takes the ids in `attachments`. Same lock as messages. |
+| `/api/host/browse/*`, `/api/host/attachments/*` | In Docker, `npm run codex:bridge` lists the folders and writes the attachments on the computer. Local access only. |
 
 More server details in [`server/README.md`](server/README.md).
 
@@ -1005,7 +1008,11 @@ metadata (letter, email, organization) is read on the host by `docker:up` and pa
   the folder you choose — the same warning as the interactive terminal applies. Attachments are written to
   `~/.habblaud/attachments/` (folder 700, files 600). In Docker, whoever starts the sessions is the host helper
   (`npm run codex:bridge`), which also reads the delivery files only from known project folders (the ones Claude Code
-  has in `<conta>/projects`), the temporary folder and the attachments.
+  has in `<conta>/projects`), the temporary folder and the attachments. **Browse folders** shows the names of the
+  computer's folders (never files or their contents) to whoever can use New agent.
+- **Attachments in messages:** with messages on (no `HABBLAUD_PTY` needed), files attached in the message box are also
+  written to `~/.habblaud/attachments/` (folder 700, files 600) and their paths go at the end of the message. In
+  Docker, the host helper (`npm run codex:bridge`) writes them; without it, attaching answers `503`.
 - **Character editor, local only:** saving or going back to random changes the office and writes to `names.json`, so it
   follows the same safeguard as the terminal (local bind, local `Host`, no proxies or tunnels): without it, the pencil doesn't show up
   and the server answers `403`. Changes require JSON and a local origin. `HABBLAUD_TERMINAL=0` turns it off too.

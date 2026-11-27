@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanListing, FolderBrowser, listFolders, parseBrowsePath } from './browse';
 
 describe('parseBrowsePath', () => {
+  it('drive-letter paths only count as absolute on Windows', () => {
+    expect(parseBrowsePath('C:/x', 'darwin')).toHaveProperty('error');
+    expect(parseBrowsePath('C:\\x', 'win32')).toBe('C:\\x');
+  });
+
   it('accepts empty (home) and absolute paths only', () => {
     expect(parseBrowsePath('')).toBe('');
     expect(parseBrowsePath('  /Users/x  ')).toBe('/Users/x');
@@ -87,5 +92,18 @@ describe('FolderBrowser', () => {
     const b = new FolderBrowser({ waitMs: 5 });
     b.poll();
     expect(await b.browse('/x')).toMatchObject({ status: 504 });
+  });
+});
+
+describe('FolderBrowser resend', () => {
+  it('hands a listing request out again when it was never answered', () => {
+    let now = 0;
+    const b = new FolderBrowser({ now: () => now });
+    b.poll();
+    void b.browse('/x');
+    const [first] = b.poll();
+    expect(b.poll()).toEqual([]);
+    now += 5_000;
+    expect(b.poll().map((p) => p.id)).toEqual([first.id]);
   });
 });

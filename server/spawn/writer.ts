@@ -12,6 +12,11 @@ export const HOST_PRESENCE_MS = 10_000;
 /** Quanto a página espera o auxiliar gravar. */
 export const WRITE_WAIT_MS = 30_000;
 const MAX_PENDING = 8;
+/**
+ * Buscado e sem confirmação há este tempo: entrega de novo na próxima rodada (a rodada pode ter caído no caminho, ex.:
+ * o auxiliar reiniciou). Gravar duas vezes só deixa uma cópia a mais; vale a primeira confirmação.
+ */
+export const RESEND_MS = 10_000;
 const PATH_MAX = 1_024;
 
 export type WriteResult = { paths: string[] } | { error: string; status: number };
@@ -25,7 +30,8 @@ interface Pending {
   id: string;
   files: Attachment[];
   count: number;
-  sent: boolean;
+  /** Quando foi entregue ao auxiliar pela última vez (undefined = ainda não). */
+  sentAt?: number;
   done: (r: WriteResult) => void;
 }
 
@@ -42,9 +48,11 @@ export interface AttachmentWriterOptions {
 export class AttachmentWriter {
   private readonly pending = new Map<string, Pending>();
   private readonly host: HostWait;
+  private readonly now: () => number;
 
   constructor(private readonly opts: AttachmentWriterOptions = {}) {
-    this.host = new HostWait(HOST_PRESENCE_MS, opts.now ?? Date.now);
+    this.now = opts.now ?? Date.now;
+    this.host = new HostWait(HOST_PRESENCE_MS, this.now);
   }
 
   available(): boolean {
@@ -71,7 +79,7 @@ export class AttachmentWriter {
         : { error: tr('o auxiliar do computador (npm run codex:bridge) não está rodando: os anexos não têm onde ser gravados'), status: 503 };
     }
     return new Promise<WriteResult>((done) => {
-      const p: Pending = { id, files, count: files.length, sent: false, done };
+      const p: Pending = { id, files, count: files.length, done };
       this.pending.set(id, p);
       this.host.wake();
       setTimeout(() => {
@@ -84,12 +92,12 @@ export class AttachmentWriter {
 
   poll(): PolledWrite[] {
     this.host.seen();
+    const now = this.now();
     const out: PolledWrite[] = [];
     for (const p of this.pending.values()) {
-      if (p.sent) continue;
-      p.sent = true;
+      if (p.sentAt !== undefined && now - p.sentAt < RESEND_MS) continue;
+      p.sentAt = now;
       out.push({ id: p.id, files: p.files.map((f) => ({ name: f.name, type: f.type, data: f.data.toString('base64') })) });
-      this.drop(p);
     }
     return out;
   }

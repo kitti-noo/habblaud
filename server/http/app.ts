@@ -676,7 +676,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         req.resume();
         hostWait(res, url, (ms, signal) => browser.pollWait(ms, signal)).then((list) => list && sendJson(res, 200, { browse: list }), (err) => fail(res, err));
       } else {
-        readJson(req, 2 * 1024 * 1024)
+        readJson(req, 8 * 1024 * 1024)
           .then((body) => {
             browser.ack(body);
             sendJson(res, 200, { ok: true });

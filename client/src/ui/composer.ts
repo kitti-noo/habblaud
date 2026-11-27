@@ -123,7 +123,7 @@ export class MessageComposer {
     this.tip = term ? null : h('p', { class: 'ui-msg__tip', text: composerTip() });
     this.el = h('div', { class: `ui-msg ui-msg--${variant}` }, this.hint, this.tray.list, this.row, this.dictStatus, this.status, this.tip);
     // Colar uma imagem (Cmd/Ctrl+V) ou soltar arquivos na caixa: anexos da mensagem.
-    this.tray.wire(this.box, this.el, () => this.mode.kind === 'ready');
+    this.tray.wire(this.box, this.el, () => this.mode.kind === 'ready' && !this.ctx.store.mock);
   }
 
   /**
@@ -162,7 +162,8 @@ export class MessageComposer {
     setTitle(this.box, ready ? '' : mode.text);
     this.row.classList.toggle('is-disabled', !ready);
     setHidden(this.sendBtn, !ready);
-    setHidden(this.attachBtn, !ready);
+    // No modo demonstração nada é gravado: sem anexos.
+    setHidden(this.attachBtn, !ready || store.mock);
     // Consulta em cache (30 s): o Mac pode instalar o Whisper ou parar o auxiliar com a página aberta.
     void dictationAvailable().then((ok) => {
       if (ok === this.canDictate) return;
@@ -282,7 +283,7 @@ export class MessageComposer {
       this.setState(agentId, { phase: 'rejected', error: r.error, at: Date.now() });
       return;
     }
-    if (withFiles && this.agentId === agentId) this.tray.clear();
+    if (withFiles && this.agentId === agentId) this.tray.clearSent();
     // Na fila: a caixa esvazia (a não ser que você tenha continuado a escrever enquanto o envio ia).
     if ((this.drafts.get(agentId) ?? '') === raw) {
       this.drafts.delete(agentId);

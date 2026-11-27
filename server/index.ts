@@ -366,8 +366,13 @@ const api = createApiHandler({
   permissions: permissions ? createPermissionRoutes(permissions) : undefined,
   messages: messages
     ? createMessageRoutes(messages, {
+        attachmentNames: attachments ? (ids) => attachments.names(ids) : undefined,
         attach: attachments && attachmentWriter
           ? async (ids) => {
+              // Sem quem grave (Docker sem o auxiliar): recusa antes de gastar os anexos, para tentar de novo.
+              if (!attachmentWriter.available()) {
+                return { error: tr('o auxiliar do computador (npm run codex:bridge) não está rodando: os anexos não têm onde ser gravados'), status: 503 };
+              }
               const files = attachments.take(ids);
               if ('error' in files) return { error: files.error, status: 400 };
               return attachmentWriter.write(files);

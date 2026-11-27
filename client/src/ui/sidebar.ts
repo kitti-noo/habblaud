@@ -260,8 +260,10 @@ export class Sidebar implements UiComponent {
     setText(r.count, String(present));
     setTitle(r.count, plural(present, tr('agente'), tr('agentes')));
     setText(r.path, shortPath(g.room.path));
-    const canAdd = !!this.ctx.spawnIn && access().spawn && /^(\/|[A-Za-z]:[\\/])/.test(g.room.path ?? '') && !g.room.id.startsWith('demo:');
+    const store = this.ctx.store;
+    const canAdd = !!this.ctx.spawnIn && access().spawn && !store.mock && !store.replaying && /^(\/|[A-Za-z]:[\\/])/.test(g.room.path ?? '') && !g.room.id.startsWith('demo:');
     setHidden(r.add, !canAdd);
+    section.classList.toggle('has-add', canAdd);
     setTitle(r.add, tr('Novo agente em {0}', [g.room.name]));
     setAttr(r.add, 'aria-label', tr('Novo agente em {0}', [g.room.name]));
     setTitle(r.head, tr('{0}\nClique para ver a sala', [g.room.path]));
