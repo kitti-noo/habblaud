@@ -11,7 +11,7 @@
 
 <p align="center"><a href="README.md">English</a> · <b>Português</b> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a></p>
 
-<p align="center">🇹🇭 <a href="SETUP.md">Instalar num computador novo (em tailandês): Docker + mandar nos agentes pela página</a></p>
+<p align="center"><a href="SETUP.md">Instalar num computador novo (em inglês): Docker + mandar nos agentes pela página</a></p>
 
 <p align="center">
   <img alt="Node.js 22.12+" src="https://img.shields.io/badge/node-%E2%89%A522.12-5fa04e?logo=node.js&logoColor=white" />
