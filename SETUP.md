@@ -103,6 +103,29 @@ In a folder that isn't trusted yet, the Claude app opens with the request filled
 Attachments are saved in `~/.habblaud/attachments/` and the agent gets their paths at the end of the message. Old
 files aren't deleted automatically; remove them when you no longer need them.
 
+## Running without Docker
+
+You can run Habblaud straight on the machine instead. Do steps 2 and 5 above (plugins, trusted folders), then:
+
+```sh
+npm run docker:down          # if the Docker version is running: both use port 4747
+npm run build
+HABBLAUD_PTY=1 npm start
+```
+
+Differences from Docker:
+
+- **No bridge needed.** The server runs on the machine, so it lists folders, starts agents and saves attachments
+  itself. Don't run `npm run codex:bridge`.
+- **The interactive terminal works:** open, take over and end Claude Code sessions from the page. It doesn't exist in
+  Docker.
+- `.env` isn't read: put `HABBLAUD_PTY=1` (and any other option) in front of `npm start`, as above.
+- After `git pull`, run `npm install && npm run build` before `npm start`.
+
+The interactive terminal uses `node-pty`, which ships prebuilt binaries: it works even when npm 11 blocks install
+scripts (`npm install-scripts ls`). If the server log says the interactive terminal is off because of `node-pty`, run
+`npm install-scripts approve node-pty` and `npm install` again.
+
 ## Start the bridge automatically (macOS)
 
 To have macOS start `npm run codex:bridge` at login and restart it if it crashes, run this in the `habblaud` folder:
