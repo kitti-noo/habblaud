@@ -2488,7 +2488,7 @@ export const ES: Readonly<Record<string, string>> = {
   "o auxiliar do computador não confirmou": "el auxiliar del equipo no confirmó",
 
   // scripts/codex-bridge.ts
-  "Uso: npm run codex:bridge [-- opções]\n\nEntrega as mensagens do escritório às sessões do Codex quando o Habblaud roda no Docker (deixe rodando no computador).\n\nOpções:\n  --port <n>   porta do Habblaud (padrão: HABBLAUD_PORT ou {0})\n  --once       faz uma rodada só e sai\n  -h, --help   mostra esta ajuda\n\nBinário do Codex: HABBLAUD_CODEX_BIN ou `codex` do PATH.": "Uso: npm run codex:bridge [-- opciones]\n\nEntrega los mensajes de la oficina a las sesiones de Codex cuando Habblaud se ejecuta en Docker (déjalo ejecutándose en el equipo).\n\nOpciones:\n  --port <n>   puerto de Habblaud (por defecto: HABBLAUD_PORT o {0})\n  --once       hace una sola pasada y sale\n  -h, --help   muestra esta ayuda\n\nBinario de Codex: HABBLAUD_CODEX_BIN o `codex` del PATH.",
+  "Uso: npm run codex:bridge [-- opções]\n\nAuxiliar do computador quando o Habblaud roda no Docker (deixe rodando): entrega as mensagens às sessões do Codex, começa os agentes novos, lista as pastas do \"Procurar pasta\", grava os anexos, lê os arquivos das entregas e transcreve o ditado.\n\nOpções:\n  --port <n>   porta do Habblaud (padrão: HABBLAUD_PORT ou {0})\n  --once       faz uma rodada só e sai\n  -h, --help   mostra esta ajuda\n\nBinário do Codex: HABBLAUD_CODEX_BIN ou `codex` do PATH.": "Uso: npm run codex:bridge [-- opciones]\n\nAuxiliar del ordenador cuando Habblaud corre en Docker (déjalo en marcha): entrega los mensajes a las sesiones de Codex, inicia los agentes nuevos, lista las carpetas de \"Buscar carpeta\", guarda los adjuntos, lee los archivos de las entregas y transcribe el dictado.\n\nOpciones:\n  --port <n>   puerto de Habblaud (por defecto: HABBLAUD_PORT o {0})\n  --once       hace una sola pasada y sale\n  -h, --help   muestra esta ayuda\n\nBinario de Codex: HABBLAUD_CODEX_BIN o `codex` del PATH.",
   "anexo ilegível": "adjunto ilegible",
   "anexo vazio ou grande demais": "adjunto vacío o demasiado grande",
   "✓ agente novo rodando em segundo plano em {0}": "✓ agente nuevo en {0} ejecutándose en segundo plano",
@@ -3307,4 +3307,6 @@ export const ES: Readonly<Record<string, string>> = {
   "o auxiliar do computador (npm run codex:bridge) não está rodando: os anexos não têm onde ser gravados": "el auxiliar del ordenador (npm run codex:bridge) no está en marcha: los adjuntos no tienen dónde guardarse",
   "o computador não gravou os anexos": "el ordenador no guardó los adjuntos",
   "o computador não gravou os anexos a tempo": "el ordenador no guardó los adjuntos a tiempo",
+  "Abrir {0}": "Abrir {0}",
+  "a mensagem com os anexos passa de 20.000 caracteres: encurte o texto": "el mensaje con los adjuntos pasa de 20.000 caracteres: acorta el texto",
 };

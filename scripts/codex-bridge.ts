@@ -40,7 +40,7 @@ export const WAIT_ROUND_MIN_MS = 500;
 export const REFUSED_RETRY_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 
-const USAGE = tr('Uso: npm run codex:bridge [-- opções]\n\nEntrega as mensagens do escritório às sessões do Codex quando o Habblaud roda no Docker (deixe rodando no computador).\n\nOpções:\n  --port <n>   porta do Habblaud (padrão: HABBLAUD_PORT ou {0})\n  --once       faz uma rodada só e sai\n  -h, --help   mostra esta ajuda\n\nBinário do Codex: HABBLAUD_CODEX_BIN ou `codex` do PATH.', [DEFAULT_PORT]);
+const USAGE = tr('Uso: npm run codex:bridge [-- opções]\n\nAuxiliar do computador quando o Habblaud roda no Docker (deixe rodando): entrega as mensagens às sessões do Codex, começa os agentes novos, lista as pastas do "Procurar pasta", grava os anexos, lê os arquivos das entregas e transcreve o ditado.\n\nOpções:\n  --port <n>   porta do Habblaud (padrão: HABBLAUD_PORT ou {0})\n  --once       faz uma rodada só e sai\n  -h, --help   mostra esta ajuda\n\nBinário do Codex: HABBLAUD_CODEX_BIN ou `codex` do PATH.', [DEFAULT_PORT]);
 
 export interface BridgeMessage {
   id: string;
@@ -342,8 +342,10 @@ export async function attachmentsRound(
     const id = typeof r?.id === 'string' ? r.id : '';
     if (!id) continue;
     const files: Attachment[] = [];
-    let bad = '';
-    for (const f of Array.isArray(r?.files) ? r.files.slice(0, ATTACHMENTS_PER_SPAWN) : []) {
+    const batch: unknown[] = Array.isArray(r?.files) ? r.files : [];
+    // Lote inteiro ou nada: gravar só uma parte deixaria arquivos no disco que o Habblaud recusa.
+    let bad = batch.length > ATTACHMENTS_PER_SPAWN ? tr('no máximo {0} anexos por pedido', [ATTACHMENTS_PER_SPAWN]) : '';
+    for (const f of bad ? [] : batch) {
       const x = rec(f);
       if (typeof x?.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(x.data)) {
         bad = tr('anexo ilegível');

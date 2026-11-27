@@ -78,6 +78,19 @@ export class AttachmentStore {
     return { id };
   }
 
+  /** Os nomes dos anexos, sem tirá-los (para conferir o tamanho da mensagem antes). undefined = algum id inválido. */
+  names(ids: unknown): string[] | undefined {
+    this.prune();
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return undefined;
+    const out: string[] = [];
+    for (const id of ids as string[]) {
+      const it = this.items.get(id);
+      if (!it) return undefined;
+      out.push(it.name);
+    }
+    return out;
+  }
+
   /** Tira os anexos do depósito (cada um só serve a um pedido). Ids desconhecidos ou vencidos = erro. */
   take(ids: unknown): Attachment[] | { error: string } {
     this.prune();
@@ -144,6 +157,14 @@ export function promptWithAttachments(prompt: string, paths: readonly string[]):
   const list = paths.map((p) => `- ${p}`).join('\n');
   const head = paths.length === 1 ? tr('Anexo enviado pelo Habblaud (leia antes de começar):') : tr('Anexos enviados pelo Habblaud (leia antes de começar):');
   return `${prompt.trim() ? `${prompt.trimEnd()}\n\n` : ''}${head}\n${list}`;
+}
+
+/**
+ * Quantos caracteres a lista dos anexos ocupa no fim da mensagem, no máximo (o caminho exato só se sabe depois de
+ * gravar: pasta pessoal + .habblaud/attachments/<data>-<id>/ + nome, com folga).
+ */
+export function attachmentsReserve(names: readonly string[]): number {
+  return names.length ? 64 + names.reduce((n, name) => n + 260 + name.length, 0) : 0;
 }
 
 /** A mensagem com a lista dos anexos no fim (agente que já está rodando). */

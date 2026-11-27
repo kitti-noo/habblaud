@@ -23,6 +23,14 @@ export function pastedName(name: string, type: string, at = new Date()): string 
   return `colado-${at.getFullYear()}${p(at.getMonth() + 1)}${p(at.getDate())}-${p(at.getHours())}${p(at.getMinutes())}${p(at.getSeconds())}.${ext}`;
 }
 
+/**
+ * Texto rico copiado (planilha, Word, página): o Excel, o Numbers e o Word põem junto uma imagem da seleção, mas quem
+ * cola quer o texto. Uma captura de tela ou um arquivo copiado no Finder não trazem HTML nem RTF.
+ */
+export function isRichText(types: readonly string[]): boolean {
+  return types.includes('text/html') || types.includes('text/rtf');
+}
+
 /** Os arquivos de um colar ou soltar (vazio = só texto: o colar segue normal). */
 export function filesFrom(data: DataTransfer | null | undefined): File[] {
   if (!data) return [];
@@ -61,14 +69,38 @@ export interface TrayOptions {
   compact?: boolean;
 }
 
+let guarded = false;
+
+/**
+ * Arquivo solto fora de uma caixa que aceita anexos: o navegador abriria o arquivo e sairia do Habblaud. Uma vez por
+ * página, o soltar de arquivos é cancelado em todo lugar (as caixas tratam o delas antes).
+ */
+function guardWindowDrops(): void {
+  if (guarded || typeof window === 'undefined') return;
+  guarded = true;
+  const files = (e: DragEvent) => !!e.dataTransfer && [...(e.dataTransfer.types ?? [])].includes('Files');
+  window.addEventListener('dragover', (e) => {
+    if (files(e) && !e.defaultPrevented) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+    }
+  });
+  window.addEventListener('drop', (e) => {
+    if (files(e)) e.preventDefault();
+  });
+}
+
 export class AttachmentTray {
   /** A lista dos anexos (vazia = escondida pelo CSS). */
   readonly list: HTMLElement;
   /** O seletor de arquivos (escondido; o botão abre). */
   readonly input: HTMLInputElement;
   private files: PendingFile[] = [];
+  /** Os arquivos do último upload() (só esses saem com clearSent()). */
+  private batch: PendingFile[] = [];
 
   constructor(private readonly opts: TrayOptions) {
+    guardWindowDrops();
     this.list = h('ul', { class: `ui-spawn__files${opts.compact ? ' ui-attach--compact' : ''}`, attrs: { 'aria-label': tr('Anexos') } });
     this.input = h('input', { type: 'file', hidden: true, attrs: { multiple: true, 'aria-hidden': 'true', tabindex: '-1' } });
     this.input.addEventListener('change', () => {
@@ -99,7 +131,7 @@ export class AttachmentTray {
   /** Colar arquivos em `field` e soltar arquivos em `zone` viram anexos. `enabled` desliga sem tirar os eventos. */
   wire(field: HTMLElement, zone: HTMLElement, enabled: () => boolean = () => true): void {
     field.addEventListener('paste', (e: ClipboardEvent) => {
-      if (!enabled()) return;
+      if (!enabled() || isRichText([...(e.clipboardData?.types ?? [])])) return;
       const files = filesFrom(e.clipboardData);
       if (!files.length) return;
       e.preventDefault();
@@ -161,11 +193,18 @@ export class AttachmentTray {
     this.opts.onChange?.();
   }
 
-  /** Sobe cada arquivo (POST `endpoint`) e devolve os ids, na ordem. Erro: lança com a mensagem do servidor. */
+  /**
+   * Sobe os arquivos de agora (POST `endpoint`) e devolve os ids, na ordem. Um arquivo tirado durante o envio não vai;
+   * um posto durante o envio fica para a próxima (clearSent() só tira os enviados). Erro: lança com a mensagem do
+   * servidor.
+   */
   async upload(endpoint: string, progress?: (i: number, total: number) => void): Promise<string[]> {
     const ids: string[] = [];
-    for (const [i, f] of this.files.entries()) {
-      progress?.(i, this.files.length);
+    const batch = [...this.files];
+    const sent: PendingFile[] = [];
+    for (const [i, f] of batch.entries()) {
+      if (!this.files.includes(f)) continue;
+      progress?.(i, batch.length);
       let res: Response;
       try {
         res = await fetch(endpoint, {
@@ -181,8 +220,17 @@ export class AttachmentTray {
       const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
       if (!res.ok || !body.id) throw new Error(body.error ?? tr('erro {0}', [res.status]));
       ids.push(body.id);
+      sent.push(f);
     }
+    this.batch = sent;
     return ids;
+  }
+
+  /** Tira da lista os arquivos que o último upload() mandou (os postos depois continuam). */
+  clearSent(): void {
+    for (const f of this.batch) if (this.files.includes(f)) this.remove(f, false);
+    this.batch = [];
+    this.opts.onChange?.();
   }
 
   private remove(item: PendingFile, notify = true): void {

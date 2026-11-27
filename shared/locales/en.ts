@@ -2488,7 +2488,7 @@ export const EN: Readonly<Record<string, string>> = {
   "o auxiliar do computador não confirmou": "the computer's helper didn't confirm",
 
   // scripts/codex-bridge.ts
-  "Uso: npm run codex:bridge [-- opções]\n\nEntrega as mensagens do escritório às sessões do Codex quando o Habblaud roda no Docker (deixe rodando no computador).\n\nOpções:\n  --port <n>   porta do Habblaud (padrão: HABBLAUD_PORT ou {0})\n  --once       faz uma rodada só e sai\n  -h, --help   mostra esta ajuda\n\nBinário do Codex: HABBLAUD_CODEX_BIN ou `codex` do PATH.": "Usage: npm run codex:bridge [-- options]\n\nDelivers office messages to Codex sessions when Habblaud runs in Docker (keep it running on the computer).\n\nOptions:\n  --port <n>   Habblaud port (default: HABBLAUD_PORT or {0})\n  --once       runs a single pass and exits\n  -h, --help   shows this help\n\nCodex binary: HABBLAUD_CODEX_BIN or `codex` from PATH.",
+  "Uso: npm run codex:bridge [-- opções]\n\nAuxiliar do computador quando o Habblaud roda no Docker (deixe rodando): entrega as mensagens às sessões do Codex, começa os agentes novos, lista as pastas do \"Procurar pasta\", grava os anexos, lê os arquivos das entregas e transcreve o ditado.\n\nOpções:\n  --port <n>   porta do Habblaud (padrão: HABBLAUD_PORT ou {0})\n  --once       faz uma rodada só e sai\n  -h, --help   mostra esta ajuda\n\nBinário do Codex: HABBLAUD_CODEX_BIN ou `codex` do PATH.": "Usage: npm run codex:bridge [-- options]\n\nComputer helper for when Habblaud runs in Docker (keep it running): delivers messages to Codex sessions, starts new agents, lists folders for \"Browse folders\", saves attachments, reads delivery files and transcribes dictation.\n\nOptions:\n  --port <n>   Habblaud port (default: HABBLAUD_PORT or {0})\n  --once       runs a single pass and exits\n  -h, --help   shows this help\n\nCodex binary: HABBLAUD_CODEX_BIN or `codex` from PATH.",
   "anexo ilegível": "unreadable attachment",
   "anexo vazio ou grande demais": "attachment empty or too large",
   "✓ agente novo rodando em segundo plano em {0}": "✓ new agent in {0} running in the background",
@@ -3306,4 +3306,6 @@ export const EN: Readonly<Record<string, string>> = {
   "o auxiliar do computador (npm run codex:bridge) não está rodando: os anexos não têm onde ser gravados": "the computer helper (npm run codex:bridge) isn't running: the attachments have nowhere to be saved",
   "o computador não gravou os anexos": "the computer didn't save the attachments",
   "o computador não gravou os anexos a tempo": "the computer didn't save the attachments in time",
+  "Abrir {0}": "Open {0}",
+  "a mensagem com os anexos passa de 20.000 caracteres: encurte o texto": "the message with the attachments goes over 20,000 characters: shorten the text",
 };

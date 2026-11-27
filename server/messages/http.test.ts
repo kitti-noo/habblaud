@@ -71,6 +71,7 @@ async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry
     terminal: true,
     messages: registry
       ? createMessageRoutes(registry, {
+          attachmentNames: opts.writer ? (ids) => attachments.names(ids) : undefined,
           attach: opts.writer
             ? async (ids) => {
                 const files = attachments.take(ids);
@@ -322,6 +323,20 @@ describe('anexos nas mensagens', () => {
     expect((await post(srv, '/api/messages', { agentId: MAIN, text: '', attachments: [id] })).status).toBe(201);
     const inbox = (await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' })).json as { messages: InboxMessage[] };
     expect(inbox.messages[0].text).toBe('Anexo enviado pelo Habblaud:\n- /a/a.txt');
+  });
+
+  it('mensagem que com os caminhos passaria do limite: recusada antes de gravar, e o anexo continua valendo', async () => {
+    let writes = 0;
+    const writer = new AttachmentWriter({ direct: true, write: (_id, files) => (writes++, files.map((f) => `/a/${f.name}`)) });
+    srv = await serveMessages({ writer });
+    await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' });
+    await sleep(30);
+    const id = ((await post(srv, '/api/attachments', { name: 'a.txt', data: Buffer.from('x').toString('base64') })).json as { id: string }).id;
+    const long = await post(srv, '/api/messages', { agentId: MAIN, text: 'x'.repeat(19_900), attachments: [id] });
+    expect(long.status).toBe(400);
+    expect(writes).toBe(0);
+    expect((await post(srv, '/api/messages', { agentId: MAIN, text: 'curta', attachments: [id] })).status).toBe(201);
+    expect(writes).toBe(1);
   });
 
   it('sem o recurso: anexos recusados', async () => {

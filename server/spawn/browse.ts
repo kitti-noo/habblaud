@@ -1,6 +1,6 @@
 // "Procurar pasta" do Novo agente: lista as subpastas de uma pasta do computador, para escolher o projeto navegando em
-// vez de digitar o caminho. Só nomes de PASTAS (nunca arquivos nem o conteúdo deles), sem seguir para fora do caminho
-// pedido. No modo Node o próprio servidor lista; no Docker (que não enxerga as pastas do host) o auxiliar do host
+// vez de digitar o caminho. Só nomes de PASTAS (nunca arquivos nem o conteúdo deles); qualquer caminho
+// absoluto pode ser listado e links para pastas são seguidos (a trava é a do Novo agente: só pelo próprio computador). No modo Node o próprio servidor lista; no Docker (que não enxerga as pastas do host) o auxiliar do host
 // (scripts/codex-bridge.ts) busca os pedidos em POST /api/host/browse/poll e devolve a lista em /api/host/browse/ack.
 // Node puro e sem dependências: também é importado pelo auxiliar do host (via tsx).
 import { randomUUID } from 'node:crypto';
@@ -17,6 +17,8 @@ export const HOST_PRESENCE_MS = 10_000;
 /** Quanto a página espera o auxiliar responder. */
 export const BROWSE_WAIT_MS = 15_000;
 const MAX_PENDING = 8;
+/** Buscado e sem resposta há este tempo: entrega de novo (a rodada do auxiliar pode ter caído no caminho). */
+export const RESEND_MS = 5_000;
 
 export interface BrowseEntry {
   name: string;
@@ -43,10 +45,12 @@ export type BrowseResult = { listing: BrowseListing } | { error: string; status:
 const PROJECT_MARKERS = ['.git', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml', 'build.gradle', 'composer.json', 'Gemfile', 'CLAUDE.md', 'AGENTS.md'];
 
 /** Confere o caminho pedido; vazio = pasta pessoal. */
-export function parseBrowsePath(raw: unknown): string | { error: string } {
+export function parseBrowsePath(raw: unknown, platform: NodeJS.Platform = process.platform): string | { error: string } {
   const p = typeof raw === 'string' ? raw.trim() : '';
   if (!p) return '';
-  if (p.length > BROWSE_PATH_MAX || p.includes('\0') || !(isAbsolute(p) || /^[A-Za-z]:[\\/]/.test(p))) return { error: tr('caminho inválido (precisa ser absoluto)') };
+  // "C:\x" só é absoluto no Windows (no Mac/Linux o resolve() o colaria na pasta atual).
+  const abs = platform === 'win32' ? isAbsolute(p) || /^[A-Za-z]:[\\/]/.test(p) : p.startsWith('/');
+  if (p.length > BROWSE_PATH_MAX || p.includes('\0') || !abs) return { error: tr('caminho inválido (precisa ser absoluto)') };
   return p;
 }
 
@@ -121,7 +125,7 @@ export function cleanListing(raw: unknown): BrowseListing | undefined {
 interface Pending {
   id: string;
   path: string;
-  sent: boolean;
+  sentAt?: number;
   done: (r: BrowseResult) => void;
 }
 
@@ -136,9 +140,11 @@ export interface FolderBrowserOptions {
 export class FolderBrowser {
   private readonly pending = new Map<string, Pending>();
   private readonly host: HostWait;
+  private readonly now: () => number;
 
   constructor(private readonly opts: FolderBrowserOptions = {}) {
-    this.host = new HostWait(HOST_PRESENCE_MS, opts.now ?? Date.now);
+    this.now = opts.now ?? Date.now;
+    this.host = new HostWait(HOST_PRESENCE_MS, this.now);
   }
 
   mode(): 'direct' | 'host' {
@@ -156,7 +162,7 @@ export class FolderBrowser {
     if (!this.host.present()) return { error: tr('o auxiliar do computador (npm run codex:bridge) não está rodando: o Docker não enxerga as pastas do computador'), status: 503 };
     if (this.pending.size >= MAX_PENDING) return { error: tr('pastas demais sendo listadas: tente de novo'), status: 429 };
     return new Promise<BrowseResult>((done) => {
-      const p: Pending = { id: randomUUID(), path: parsed, sent: false, done };
+      const p: Pending = { id: randomUUID(), path: parsed, done };
       this.pending.set(p.id, p);
       this.host.wake();
       setTimeout(() => {
@@ -168,10 +174,11 @@ export class FolderBrowser {
   /** Rodada do auxiliar: marca presença e entrega as pastas pedidas. */
   poll(): Array<{ id: string; path: string }> {
     this.host.seen();
+    const now = this.now();
     const out: Array<{ id: string; path: string }> = [];
     for (const p of this.pending.values()) {
-      if (p.sent) continue;
-      p.sent = true;
+      if (p.sentAt !== undefined && now - p.sentAt < RESEND_MS) continue;
+      p.sentAt = now;
       out.push({ id: p.id, path: p.path });
     }
     return out;

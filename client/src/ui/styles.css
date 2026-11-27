@@ -11149,7 +11149,11 @@ html.is-replay #world {
   display: none;
 }
 
-/* Novo agente já no projeto: "+" no canto do cabeçalho da sala (ui/sidebar.ts). */
+/* Novo agente já no projeto: "+" no canto do cabeçalho da sala (ui/sidebar.ts); o cabeçalho abre espaço para ele. */
+.ui-room.has-add .ui-room__head {
+  padding-right: 38px;
+}
+
 .ui-room__add {
   position: absolute;
   top: 6px;
@@ -11281,17 +11285,36 @@ html.is-replay #world {
 .ui-browse__item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 32px;
-  padding: 4px 6px;
+  padding: 2px 6px 2px 0;
   border-radius: 6px;
-  cursor: pointer;
 }
 
 .ui-browse__item:hover,
-.ui-browse__item:focus-visible {
+.ui-browse__item:focus-within {
   background: var(--ui-bg-hover);
-  outline: none;
+}
+
+.ui-browse__open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ui-browse__open:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
 }
 
 .ui-browse__name {
@@ -11325,7 +11348,12 @@ html.is-replay #world {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.45;
+}
+
+.ui-browse__pick:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
 }
 
 .ui-browse__item:hover .ui-browse__pick,
