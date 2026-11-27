@@ -145,3 +145,11 @@ export function promptWithAttachments(prompt: string, paths: readonly string[]):
   const head = paths.length === 1 ? tr('Anexo enviado pelo Habblaud (leia antes de começar):') : tr('Anexos enviados pelo Habblaud (leia antes de começar):');
   return `${prompt.trim() ? `${prompt.trimEnd()}\n\n` : ''}${head}\n${list}`;
 }
+
+/** A mensagem com a lista dos anexos no fim (agente que já está rodando). */
+export function messageWithAttachments(text: string, paths: readonly string[]): string {
+  if (!paths.length) return text;
+  const list = paths.map((p) => `- ${p}`).join('\n');
+  const head = paths.length === 1 ? tr('Anexo enviado pelo Habblaud:') : tr('Anexos enviados pelo Habblaud:');
+  return `${text.trim() ? `${text.trimEnd()}\n\n` : ''}${head}\n${list}`;
+}

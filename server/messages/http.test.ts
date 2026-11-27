@@ -16,6 +16,8 @@ import { Office } from '../model/office';
 import { request } from '../test/permission-server';
 import { tempDir } from '../test/fixtures';
 import { createMessageRoutes } from './http';
+import { AttachmentStore } from '../spawn/attachments';
+import { AttachmentWriter } from '../spawn/writer';
 import { MessageRegistry, type MessageRegistryOptions } from './registry';
 
 setQuiet(true);
@@ -31,7 +33,7 @@ interface MessageServer {
 }
 
 /** Office + Hub + rotas de verdade numa porta livre do 127.0.0.1, com um agente principal na sessão "sess-1". */
-async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry?: Partial<MessageRegistryOptions> } = {}): Promise<MessageServer> {
+async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry?: Partial<MessageRegistryOptions>; writer?: AttachmentWriter } = {}): Promise<MessageServer> {
   const tmp = tempDir();
   const enabled = opts.enabled ?? true;
   const late: { registry?: MessageRegistry } = {};
@@ -58,6 +60,7 @@ async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry
   late.registry = registry;
   registry?.start();
   const accounts = new AccountsService({ dirs: [], home: tmp.dir, env: {}, onChange: () => {} });
+  const attachments = new AttachmentStore();
   const api = createApiHandler({
     office,
     hub,
@@ -66,7 +69,18 @@ async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry
     version: 't',
     inDocker: false,
     terminal: true,
-    messages: registry ? createMessageRoutes(registry) : undefined,
+    messages: registry
+      ? createMessageRoutes(registry, {
+          attach: opts.writer
+            ? async (ids) => {
+                const files = attachments.take(ids);
+                return 'error' in files ? { error: files.error, status: 400 } : opts.writer!.write(files);
+              }
+            : undefined,
+        })
+      : undefined,
+    attachments: opts.writer ? attachments : undefined,
+    attachmentWriter: opts.writer,
   });
   const guard = createRequestGuard({ allowedHosts: new Set(['habblaud.lan']) });
   const server = http.createServer((req, res) => {
@@ -271,5 +285,48 @@ describe('rotas', () => {
   it('demo com o recurso desligado: os agentes fictícios também não recebem', async () => {
     srv = await serveMessages({ enabled: false, demo: true });
     expect((await snapshot(srv)).agents.filter((a) => a.canMessage)).toEqual([]);
+  });
+});
+
+describe('anexos nas mensagens', () => {
+  it('sobe o arquivo, grava no computador e a mensagem leva o caminho no fim', async () => {
+    const written: Array<{ name: string; size: number }> = [];
+    const writer = new AttachmentWriter({
+      direct: true,
+      write: (_id, files) => files.map((f) => (written.push({ name: f.name, size: f.data.length }), `/home/me/.habblaud/attachments/x/${f.name}`)),
+    });
+    srv = await serveMessages({ writer });
+    await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' });
+    await sleep(30);
+    const up = await post(srv, '/api/attachments', { name: 'bug.png', type: 'image/png', data: Buffer.from('png!').toString('base64') });
+    expect(up.status).toBe(201);
+    const id = (up.json as { id: string }).id;
+    const created = await post(srv, '/api/messages', { agentId: MAIN, text: 'olha isso', attachments: [id] });
+    expect(created.status).toBe(201);
+    expect(written).toEqual([{ name: 'bug.png', size: 4 }]);
+    const inbox = (await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' })).json as { messages: InboxMessage[] };
+    expect(inbox.messages[0].text).toBe('olha isso\n\nAnexo enviado pelo Habblaud:\n- /home/me/.habblaud/attachments/x/bug.png');
+    // O anexo só serve uma vez.
+    expect((await post(srv, '/api/messages', { agentId: MAIN, text: 'de novo', attachments: [id] })).status).toBe(400);
+  });
+
+  it('não grava nada para um agente que não recebe (sem o plugin) e aceita mensagem só com anexo', async () => {
+    let writes = 0;
+    const writer = new AttachmentWriter({ direct: true, write: (_id, files) => (writes++, files.map((f) => `/a/${f.name}`)) });
+    srv = await serveMessages({ writer });
+    const id = ((await post(srv, '/api/attachments', { name: 'a.txt', data: Buffer.from('x').toString('base64') })).json as { id: string }).id;
+    expect((await post(srv, '/api/messages', { agentId: MAIN, text: 'oi', attachments: [id] })).status).toBe(409);
+    expect(writes).toBe(0);
+    await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' });
+    await sleep(30);
+    expect((await post(srv, '/api/messages', { agentId: MAIN, text: '', attachments: [id] })).status).toBe(201);
+    const inbox = (await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' })).json as { messages: InboxMessage[] };
+    expect(inbox.messages[0].text).toBe('Anexo enviado pelo Habblaud:\n- /a/a.txt');
+  });
+
+  it('sem o recurso: anexos recusados', async () => {
+    srv = await serveMessages();
+    expect((await post(srv, '/api/attachments', { name: 'a.txt', data: 'eA==' })).status).toBe(403);
+    expect((await post(srv, '/api/messages', { agentId: MAIN, text: 'oi', attachments: ['x'] })).status).toBe(400);
   });
 });

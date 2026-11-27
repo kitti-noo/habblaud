@@ -1,7 +1,7 @@
 // Rotas das mensagens pelo escritório. A trava (recurso ligado + Host local) já foi conferida em http/app.ts; o
 // guard (http/guard.ts) já exigiu JSON e Origin local nos POST (contra CSRF).
 //
-//   POST /api/messages          (página)  {agentId, text}: 201 OutboxMessage (queued) | 400 | 404 | 409 | 429
+//   POST /api/messages          (página)  {agentId, text, attachments?: [ids]}: 201 OutboxMessage (queued) | 400 | 404 | 409 | 429
 //   GET  /api/messages/:id      (página)  situação da mensagem: 200 OutboxMessage | 404
 //   POST /api/mod/inbox         (plugin)  {session, account?}: 200 {messages: InboxMessage[]} (e marca a presença)
 //   POST /api/mod/inbox/ack     (plugin)  {session, results: [{id, ok, error?}]}: 200 {ok: true}
@@ -12,6 +12,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpError, readJson, sendJson } from '../http/app';
 import { InvalidRequest, MAX_OPEN, type MessageRegistry } from './registry';
 import { tr } from '../../shared/i18n';
+import { messageWithAttachments } from '../spawn/attachments';
+
+export interface MessageRouteOptions {
+  /**
+   * Anexos (ids de POST /api/attachments): grava no computador do agente e devolve os caminhos, que vão no fim do
+   * texto. Ausente = mensagens sem anexos.
+   */
+  attach?: (ids: unknown) => Promise<{ paths: string[] } | { error: string; status: number }>;
+}
 
 const ITEM = /^\/api\/messages\/([^/]+)$/;
 
@@ -27,9 +36,22 @@ function fail(res: ServerResponse, err: unknown): void {
   else sendJson(res, 500, { error: tr('erro interno') });
 }
 
-export function createMessageRoutes(registry: MessageRegistry): (req: IncomingMessage, res: ServerResponse, path: string) => void {
+export function createMessageRoutes(registry: MessageRegistry, opts: MessageRouteOptions = {}): (req: IncomingMessage, res: ServerResponse, path: string) => void {
   const send = async (req: IncomingMessage, res: ServerResponse) => {
-    const r = registry.send(await readJson(req));
+    let body = await readJson(req);
+    const ids = body && typeof body === 'object' ? (body as { attachments?: unknown }).attachments : undefined;
+    if (ids !== undefined && !(Array.isArray(ids) && !ids.length)) {
+      if (!opts.attach) return sendJson(res, 400, { error: tr('anexos desligados') });
+      const b = body as Record<string, unknown>;
+      if (typeof b.text !== 'string') return sendJson(res, 400, { error: 'esperado {agentId, text}' });
+      // Antes de gravar: o agente precisa poder receber (senão os arquivos ficariam no disco à toa).
+      const problem = registry.cannotReceive(b.agentId);
+      if (problem) return sendJson(res, problem.status, { error: problem.error });
+      const w = await opts.attach(ids);
+      if ('error' in w) return sendJson(res, w.status, { error: w.error });
+      body = { ...b, text: messageWithAttachments(b.text, w.paths) };
+    }
+    const r = registry.send(body);
     if ('message' in r) return sendJson(res, 201, r.message);
     switch (r.error) {
       case 'not-found':

@@ -45,6 +45,8 @@ import { createCliRunner, createOpener, SpawnService } from './spawn/spawn';
 import { runnableClaudeBin } from './claude-bin';
 import { AttachmentStore } from './spawn/attachments';
 import { recentFolders } from './spawn/folders';
+import { FolderBrowser } from './spawn/browse';
+import { AttachmentWriter } from './spawn/writer';
 import { isDemoId } from '../shared/timeline';
 import { DictationService } from './dictation/dictation';
 import { createWhisperTranscriber, findWhisper } from './dictation/whisper';
@@ -255,11 +257,16 @@ const ptyOptIn = isTruthy(ptyFlag);
 // Novo agente pelo escritório (sessão do Claude Code em segundo plano, ou a tela do app do Claude preenchida): a
 // liberação acima mais a trava das mensagens. No Docker, quem roda é o auxiliar do host (npm run codex:bridge).
 const spawnOn = config.messages && ptyOptIn;
-const attachments = spawnOn ? new AttachmentStore() : undefined;
+// Anexos: do Novo agente e das mensagens (caixa de mensagem), então existem com as mensagens ligadas.
+const attachments = config.messages ? new AttachmentStore() : undefined;
+// Grava os anexos das mensagens no computador (no Docker, o auxiliar do host grava).
+const attachmentWriter = attachments ? new AttachmentWriter({ direct: !config.inDocker, release: (n) => attachments.release(n) }) : undefined;
 const spawnBin = config.inDocker ? undefined : runnableClaudeBin(process.env);
 const spawn = spawnOn
   ? new SpawnService(config.inDocker ? { attachments } : { opener: createOpener(), cli: spawnBin ? createCliRunner(spawnBin) : undefined, attachments })
   : undefined;
+// Procurar pasta (Novo agente): só nomes de pastas; no Docker quem lista é o auxiliar do host.
+const browser = spawnOn ? new FolderBrowser({ direct: !config.inDocker }) : undefined;
 // Ditado: no Docker quem transcreve é o auxiliar do host; no Node, o servidor, se achar o Whisper local.
 const whisper = config.messages && !config.inDocker ? findWhisper() : undefined;
 const dictation = config.messages
@@ -357,13 +364,25 @@ const api = createApiHandler({
   sessions: history,
   timeline: createTimelineHandler({ dir: timelineDir, recording: !!timeline }),
   permissions: permissions ? createPermissionRoutes(permissions) : undefined,
-  messages: messages ? createMessageRoutes(messages) : undefined,
+  messages: messages
+    ? createMessageRoutes(messages, {
+        attach: attachments && attachmentWriter
+          ? async (ids) => {
+              const files = attachments.take(ids);
+              if ('error' in files) return { error: files.error, status: 400 };
+              return attachmentWriter.write(files);
+            }
+          : undefined,
+      })
+    : undefined,
   pty: ptys ? createPtyRoutes(ptys) : undefined,
   spawn,
   attachments,
   dictation,
   deliveries,
   files: deliveryFiles,
+  browser,
+  attachmentWriter,
   spawnFolders: async () => {
     const snap = hub.current();
     const last = new Map<string, number>();

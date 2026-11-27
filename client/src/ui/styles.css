@@ -1547,6 +1547,7 @@
 }
 
 .ui-room {
+  position: relative;
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.022);
   border: 1px solid var(--ui-line);
@@ -11146,4 +11147,245 @@ html.is-replay #world {
 
 .ui-world-chip__visitors[hidden] {
   display: none;
+}
+
+/* Novo agente já no projeto: "+" no canto do cabeçalho da sala (ui/sidebar.ts). */
+.ui-room__add {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-bg-soft);
+  color: var(--ui-accent);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+
+.ui-room:hover .ui-room__add,
+.ui-room__add:focus-visible,
+.ui-room__add[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.ui-room__add:hover {
+  border-color: var(--ui-accent);
+}
+
+.ui-room__add:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
+/* Procurar pasta (ui/spawn.ts, FolderBrowserView). */
+.ui-spawn__pick {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ui-browse {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  background: var(--ui-bg-soft);
+}
+
+.ui-browse[hidden] {
+  display: none;
+}
+
+.ui-browse__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ui-browse__nav {
+  flex: none;
+  min-width: 30px;
+  justify-content: center;
+}
+
+.ui-browse__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+  font-size: 12px;
+}
+
+.ui-browse__crumb {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ui-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ui-browse__crumb:hover {
+  background: var(--ui-bg-hover);
+}
+
+.ui-browse__crumb.is-current {
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.ui-browse__crumbs > * + *:not(:nth-child(2))::before {
+  content: '/';
+  margin-right: 4px;
+  color: var(--ui-faint);
+}
+
+.ui-browse__filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.ui-browse__hidden {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.ui-browse__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ui-browse__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ui-browse__item:hover,
+.ui-browse__item:focus-visible {
+  background: var(--ui-bg-hover);
+  outline: none;
+}
+
+.ui-browse__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-browse__item.is-project .ui-browse__name {
+  font-weight: 600;
+}
+
+.ui-browse__tag {
+  flex: none;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-accent) 16%, transparent);
+  color: var(--ui-accent);
+}
+
+.ui-browse__pick {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.ui-browse__item:hover .ui-browse__pick,
+.ui-browse__item:focus-within .ui-browse__pick,
+.ui-browse__pick:focus-visible {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .ui-browse__pick {
+    opacity: 1;
+  }
+}
+
+.ui-browse__empty {
+  padding: 8px 6px;
+  color: var(--ui-muted);
+  font-size: 12.5px;
+}
+
+.ui-browse__status:empty {
+  display: none;
+}
+
+.ui-browse__status.is-error {
+  color: var(--ui-danger, #e5484d);
+}
+
+.ui-browse__use {
+  justify-content: center;
+}
+
+/* Anexos na caixa de mensagem e no Novo agente (ui/attachments.ts). */
+.ui-attach--compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+}
+
+.ui-attach--compact .ui-spawn__file {
+  grid-template-columns: 28px minmax(0, 140px) auto;
+  padding: 2px 4px;
+}
+
+.ui-attach--compact .ui-spawn__thumb {
+  width: 28px;
+  height: 28px;
+}
+
+.ui-attach--compact .ui-spawn__file-size {
+  display: none;
+}
+
+.ui-attach__btn {
+  flex: none;
+  align-self: flex-end;
+}
+
+.ui-msg.is-dropping,
+.ui-spawn.is-dropping {
+  outline: 2px dashed var(--ui-accent);
+  outline-offset: 2px;
 }

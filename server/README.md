@@ -73,6 +73,8 @@ festa) ou 10 min. Push só avisa. O mesmo CI visto de novo em 2 min não repete 
 | `DELETE /api/agents/:id/character` | "Voltar ao sorteio": apaga o personagem da sala; `200 {ok}` ou `404`; só com acesso local |
 | `GET /api/sessions/recent` | `RecentSessionsResponse`: sessões dos últimos 7 dias de todas as contas (até 150); mesma trava do terminal |
 | `GET /api/sessions/:conta/:sessionId/terminal` | SSE da conversa de uma sessão do histórico (mesmo protocolo do terminal); mesma trava |
+| `GET /api/spawn/browse?path=` | "Procurar pasta" do Novo agente: `{path, parent?, home, entries:[{name, path, project?, hidden?}], truncated?}`, só subpastas (até 400); `path` vazio = pasta pessoal. No Docker, o auxiliar do host lista (`POST /api/host/browse/poll` e `/ack`); mesma trava do Novo agente |
+| `POST /api/attachments` | anexo da caixa de mensagem: `{name, type?, data (base64)}` → `201 {id, name, size}`; o `POST /api/messages` leva `attachments: [ids]`, os arquivos são gravados em `~/.habblaud/attachments/` (no Docker, pelo auxiliar do host: `POST /api/host/attachments/poll` e `/ack`) e os caminhos vão no fim do texto. Mesma trava das mensagens |
 | `GET /api/stats?day=AAAA-MM-DD&tz=<IANA>&source=real\|demo` | `DayStatsResponse` do "Meu dia" (ver abaixo); padrões: hoje, fuso do servidor, demo se ligado e o dia é hoje |
 | `GET /api/stats/days?tz=<IANA>` | `StatsDaysResponse`: dias com dados reais (e do demo, se ligado), mais recente primeiro |
 | `GET /api/timeline/days` | `{recording, days:[{day, bytes, from, to}]}`: dias gravados para o timelapse, do mais recente ao mais antigo |

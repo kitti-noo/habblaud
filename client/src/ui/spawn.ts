@@ -10,10 +10,11 @@ import type { UiContext } from './context';
 import { DictationButton, dictationAvailable, insertDictation } from './dictation';
 import { h, iconButton, setHidden, setText } from './dom';
 import { ICONS } from './icons';
+import { AttachmentTray } from './attachments';
+
+export { formatBytes, MAX_FILE_BYTES, MAX_FILES } from './attachments';
 
 export const SPAWN_PROMPT_MAX = 8_000;
-export const MAX_FILES = 8;
-export const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const POLL_MS = 700;
 /**
  * Quanto a página espera o pedido abrir: mais que o servidor leva para desistir (fila 30 s + `claude --bg` e `open`,
@@ -65,21 +66,6 @@ export function ago(at: number, now = Date.now()): string {
   return `${Math.round(hours / 24)} d`;
 }
 
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
-}
-
-function fileToBase64(file: Blob): Promise<string> {
-  return new Promise((ok, fail) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).replace(/^data:[^,]*,/, ''));
-    r.onerror = () => fail(new Error(tr('não deu para ler o arquivo')));
-    r.readAsDataURL(file);
-  });
-}
-
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -108,20 +94,13 @@ function writePref(path: string): void {
   }
 }
 
-interface PendingFile {
-  file: File;
-  url?: string;
-  el: HTMLElement;
-}
-
 export class SpawnPanel {
   readonly el: HTMLElement;
   private readonly folderList: HTMLElement;
   private readonly otherBtn: HTMLButtonElement;
   private readonly folder: HTMLInputElement;
   private readonly prompt: HTMLTextAreaElement;
-  private readonly fileInput: HTMLInputElement;
-  private readonly fileList: HTMLElement;
+  private readonly tray: AttachmentTray;
   private readonly dictate: DictationButton;
   private readonly submitBtn: HTMLButtonElement;
   private readonly status: HTMLElement;
@@ -130,11 +109,13 @@ export class SpawnPanel {
   private folders: FolderOption[] = [];
   private selected = '';
   private typing = false;
-  private files: PendingFile[] = [];
+  private readonly browser: FolderBrowserView;
 
   constructor(private readonly ctx: UiContext) {
     this.folderList = h('div', { class: 'ui-spawn__folders', role: 'radiogroup', attrs: { 'aria-label': tr('Projetos recentes') } });
     this.otherBtn = h('button', { class: 'ui-spawn__other', type: 'button', on: { click: () => this.showOther(true) } }, tr('+ Outra pasta'));
+    this.browser = new FolderBrowserView((path) => this.choose(path));
+    const browseBtn = h('button', { class: 'ui-spawn__other ui-spawn__browse-btn', type: 'button', on: { click: () => this.browser.toggle(this.typing ? this.folder.value.trim() : this.selected) } }, tr('📁 Procurar pasta…'));
     this.folder = h('input', {
       class: 'ui-rename__input ui-spawn__path',
       type: 'text',
@@ -145,15 +126,8 @@ export class SpawnPanel {
       class: 'ui-rename__input ui-spawn__prompt',
       attrs: { id: 'ui-spawn-prompt', rows: 5, maxlength: SPAWN_PROMPT_MAX, placeholder: tr('O que o agente deve fazer (opcional)') },
     });
-    this.fileInput = h('input', { type: 'file', hidden: true, attrs: { multiple: true, 'aria-hidden': 'true', tabindex: '-1' } });
-    this.fileInput.addEventListener('change', () => {
-      this.addFiles([...(this.fileInput.files ?? [])]);
-      this.fileInput.value = '';
-    });
-    const attachBtn = h('button', { class: 'ui-btn ui-spawn__attach', type: 'button', attrs: { title: tr('Anexar imagens ou arquivos ao pedido') }, on: { click: () => this.fileInput.click() } });
-    const clip = h('span', { attrs: { 'aria-hidden': 'true' } });
-    clip.innerHTML = ICONS.attach;
-    attachBtn.append(clip, h('span', { text: tr('Anexar') }));
+    this.tray = new AttachmentTray({ say: (text, error) => this.say(text, error) });
+    const attachBtn = this.tray.button(false, 'ui-spawn__attach');
     this.dictate = new DictationButton(
       (t) => {
         const { value, caret } = insertDictation(this.prompt.value, this.prompt.selectionStart ?? this.prompt.value.length, this.prompt.selectionEnd ?? this.prompt.value.length, t.text);
@@ -163,7 +137,6 @@ export class SpawnPanel {
       (text, error) => this.say(text, error),
     );
     setHidden(this.dictate.el, true);
-    this.fileList = h('ul', { class: 'ui-spawn__files', attrs: { 'aria-label': tr('Anexos') } });
     this.submitBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow ui-spawn__go', type: 'button', on: { click: () => void this.submit() } }, tr('Começar'));
     this.status = h('p', { class: 'ui-rename__hint ui-spawn__status', attrs: { role: 'status', 'aria-live': 'polite' } });
     for (const field of [this.folder, this.prompt] as HTMLElement[]) {
@@ -190,17 +163,20 @@ export class SpawnPanel {
         { class: 'ui-set-group ui-spawn__body' },
         h('p', { class: 'ui-spawn__label', attrs: { id: 'ui-spawn-folders-label' }, text: tr('Projeto') }),
         this.folderList,
-        this.otherBtn,
+        h('div', { class: 'ui-spawn__pick' }, this.otherBtn, browseBtn),
+        this.browser.el,
         this.folder,
         h('label', { class: 'ui-spawn__label', attrs: { for: 'ui-spawn-prompt' }, text: tr('Pedido') }),
         this.prompt,
-        h('div', { class: 'ui-spawn__tools' }, this.dictate.el, attachBtn, this.fileInput),
-        this.fileList,
+        h('div', { class: 'ui-spawn__tools' }, this.dictate.el, attachBtn, this.tray.input),
+        this.tray.list,
         h('p', { class: 'ui-rename__hint', text: tr('Começa na hora uma sessão do Claude Code em segundo plano no computador, na pasta escolhida; as permissões chegam aqui. Pasta que o Claude Code ainda não conhece abre no app do Claude e espera o Enter lá. Anexos vão para ~/.habblaud/attachments e o pedido leva os caminhos.') }),
         this.submitBtn,
         this.status,
       ),
     );
+    // Colar uma imagem no pedido ou soltar arquivos no painel: anexos.
+    this.tray.wire(this.prompt, this.el);
     this.el.addEventListener('toggle', () => {
       this.anchor?.setAttribute('aria-expanded', String(this.isOpen));
       if (!this.isOpen) this.dictate.cancel();
@@ -215,9 +191,18 @@ export class SpawnPanel {
     }
   }
 
+  /** Abre já com a pasta escolhida (botão "+" de uma sala na barra lateral). */
+  openFor(anchor: HTMLElement, folder: string): void {
+    if (this.isOpen && this.anchor === anchor) return this.hide();
+    if (this.isOpen) this.hide();
+    this.toggle(anchor);
+    this.choose(folder);
+  }
+
   toggle(anchor: HTMLElement): void {
     this.anchor = anchor;
     if (this.isOpen) return this.hide();
+    this.browser.close();
     // Primeiro com o que o escritório já sabe; a lista do servidor (histórico) chega logo depois.
     if (!this.folders.length) this.setFolders(spawnFolders(this.ctx.store.snapshot).map((path) => ({ path, name: path.split(/[\\/]/).pop() || path, lastAt: 0 })));
     void this.loadFolders();
@@ -288,6 +273,13 @@ export class SpawnPanel {
     else if (!known && this.selected && !this.typing) this.showOther(true, this.selected);
   }
 
+  /** Escolhe uma pasta: a da lista, se estiver nela; senão, no campo de caminho. */
+  private choose(path: string): void {
+    if (this.folders.some((f) => f.path === path)) this.pick(path);
+    else this.showOther(true, path);
+    this.browser.close();
+  }
+
   private pick(path: string): void {
     this.selected = path;
     this.typing = false;
@@ -311,37 +303,6 @@ export class SpawnPanel {
     }
   }
 
-  private addFiles(list: File[]): void {
-    for (const file of list) {
-      if (this.files.length >= MAX_FILES) {
-        this.say(tr('No máximo {0} anexos por pedido.', [MAX_FILES]), true);
-        break;
-      }
-      if (file.size > MAX_FILE_BYTES) {
-        this.say(tr('{0} passa de {1} MB.', [file.name, MAX_FILE_BYTES / 1024 / 1024]), true);
-        continue;
-      }
-      if (!file.size) continue;
-      const url = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-      const item: PendingFile = { file, url, el: h('li', { class: 'ui-spawn__file' }) };
-      const thumb = url ? h('img', { class: 'ui-spawn__thumb', attrs: { src: url, alt: '' } }) : h('span', { class: 'ui-spawn__thumb ui-spawn__thumb--doc', attrs: { 'aria-hidden': 'true' }, text: (file.name.split('.').pop() ?? '').slice(0, 4).toUpperCase() || tr('ARQ') });
-      const remove = iconButton(ICONS.close, tr('Tirar {0}', [file.name]), () => this.removeFile(item), 'ui-icon-btn--sm ui-spawn__file-x');
-      item.el.append(thumb, h('span', { class: 'ui-spawn__file-name', text: file.name, attrs: { title: file.name } }), h('span', { class: 'ui-spawn__file-size', text: formatBytes(file.size) }), remove);
-      this.files.push(item);
-      this.fileList.append(item.el);
-    }
-  }
-
-  private removeFile(item: PendingFile): void {
-    if (item.url) URL.revokeObjectURL(item.url);
-    item.el.remove();
-    this.files = this.files.filter((f) => f !== item);
-  }
-
-  private clearFiles(): void {
-    for (const f of [...this.files]) this.removeFile(f);
-  }
-
   private say(text: string, error = false): void {
     setText(this.status, text);
     this.status.classList.toggle('is-error', error);
@@ -355,16 +316,9 @@ export class SpawnPanel {
     this.busy = true;
     this.submitBtn.disabled = true;
     try {
-      const ids: string[] = [];
-      for (const [i, f] of this.files.entries()) {
-        this.say(this.files.length > 1 ? tr('Enviando anexos ({0} de {1})…', [i + 1, this.files.length]) : tr('Enviando o anexo…'));
-        const r = await api<{ id: string }>('/api/spawn/attachments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: f.file.name, type: f.file.type, data: await fileToBase64(f.file) }),
-        });
-        ids.push(r.id);
-      }
+      const ids = await this.tray.upload('/api/spawn/attachments', (i, n) =>
+        this.say(n > 1 ? tr('Enviando anexos ({0} de {1})…', [i + 1, n]) : tr('Enviando o anexo…')),
+      );
       this.say(tr('Começando no computador…'));
       let info = await api<SpawnInfo>('/api/spawn', {
         method: 'POST',
@@ -387,7 +341,7 @@ export class SpawnPanel {
           !running && !!info.note,
         );
         this.prompt.value = '';
-        this.clearFiles();
+        this.tray.clear();
         writePref(folder);
         this.ctx.announce(running ? tr('Agente novo rodando.') : tr('Agente novo aberto no app do Claude.'));
       } else this.say(info.error ? tr('Não abriu: {0}', [info.error]) : tr('O computador não confirmou a abertura.'), true);
@@ -397,5 +351,139 @@ export class SpawnPanel {
       this.busy = false;
       this.submitBtn.disabled = false;
     }
+  }
+}
+
+interface BrowseEntry {
+  name: string;
+  path: string;
+  project?: boolean;
+  hidden?: boolean;
+}
+
+interface BrowseListing {
+  path: string;
+  parent?: string;
+  home: string;
+  entries: BrowseEntry[];
+  truncated?: boolean;
+}
+
+/** Caminho em pedaços clicáveis ("/", "Users", "voce", ...). */
+export function crumbs(path: string): Array<{ name: string; path: string }> {
+  const win = /^[A-Za-z]:[\\/]/.test(path);
+  const sep = win ? '\\' : '/';
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  const out: Array<{ name: string; path: string }> = win ? [] : [{ name: '/', path: '/' }];
+  let acc = '';
+  for (const [i, part] of parts.entries()) {
+    acc = win ? (i === 0 ? `${part}${sep}` : `${acc.replace(/[\\/]$/, '')}${sep}${part}`) : `${acc}/${part}`;
+    out.push({ name: part, path: acc });
+  }
+  return out;
+}
+
+/** Navegador de pastas do computador (GET /api/spawn/browse; no Docker, quem lista é o auxiliar do host). */
+export class FolderBrowserView {
+  readonly el: HTMLElement;
+  private readonly crumbsEl: HTMLElement;
+  private readonly list: HTMLElement;
+  private readonly status: HTMLElement;
+  private readonly useBtn: HTMLButtonElement;
+  private readonly hiddenToggle: HTMLInputElement;
+  private readonly filter: HTMLInputElement;
+  private listing?: BrowseListing;
+  private seq = 0;
+
+  constructor(private readonly onChoose: (path: string) => void) {
+    this.crumbsEl = h('div', { class: 'ui-browse__crumbs', attrs: { 'aria-label': tr('Caminho') } });
+    this.filter = h('input', { class: 'ui-rename__input ui-browse__filter', type: 'search', attrs: { placeholder: tr('Filtrar pastas'), spellcheck: 'false', autocomplete: 'off', 'aria-label': tr('Filtrar pastas') } });
+    this.filter.addEventListener('input', () => this.render());
+    for (const ev of ['keydown', 'keyup'] as const) this.filter.addEventListener(ev, (e) => e.stopPropagation());
+    this.hiddenToggle = h('input', { type: 'checkbox' });
+    this.hiddenToggle.addEventListener('change', () => this.render());
+    this.list = h('ul', { class: 'ui-browse__list', role: 'listbox', attrs: { 'aria-label': tr('Pastas') } });
+    this.status = h('p', { class: 'ui-rename__hint ui-browse__status', attrs: { role: 'status', 'aria-live': 'polite' } });
+    this.useBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow ui-browse__use', type: 'button', on: { click: () => this.listing && this.onChoose(this.listing.path) } }, tr('Usar esta pasta'));
+    const upBtn = h('button', { class: 'ui-btn ui-browse__nav', type: 'button', attrs: { title: tr('Pasta de cima') }, on: { click: () => this.listing?.parent && void this.go(this.listing.parent) } }, '↑');
+    const homeBtn = h('button', { class: 'ui-btn ui-browse__nav', type: 'button', attrs: { title: tr('Pasta pessoal') }, on: { click: () => void this.go('') } }, '~');
+    this.el = h(
+      'div',
+      { class: 'ui-browse', hidden: true },
+      h('div', { class: 'ui-browse__bar' }, upBtn, homeBtn, this.crumbsEl),
+      h('div', { class: 'ui-browse__bar' }, this.filter, h('label', { class: 'ui-browse__hidden' }, this.hiddenToggle, h('span', { text: tr('Ocultas') }))),
+      this.list,
+      this.status,
+      this.useBtn,
+    );
+  }
+
+  get isOpen(): boolean {
+    return !this.el.hidden;
+  }
+
+  toggle(start: string): void {
+    if (this.isOpen) return this.close();
+    setHidden(this.el, false);
+    void this.go(/^(\/|[A-Za-z]:[\\/])/.test(start) ? start : '');
+  }
+
+  close(): void {
+    setHidden(this.el, true);
+  }
+
+  private async go(path: string): Promise<void> {
+    const n = ++this.seq;
+    setText(this.status, tr('Lendo as pastas…'));
+    this.status.classList.remove('is-error');
+    try {
+      const listing = await api<BrowseListing>(`/api/spawn/browse?path=${encodeURIComponent(path)}`);
+      if (n !== this.seq) return;
+      this.listing = listing;
+      this.filter.value = '';
+      setText(this.status, listing.truncated ? tr('Muitas pastas: mostrando as primeiras {0}.', [listing.entries.length]) : '');
+      this.render();
+    } catch (err) {
+      if (n !== this.seq) return;
+      // Pasta que sumiu (ou caminho digitado errado): volta para a pasta pessoal uma vez.
+      if (path && !this.listing) return void this.go('');
+      setText(this.status, (err as Error).message);
+      this.status.classList.add('is-error');
+    }
+  }
+
+  private render(): void {
+    const l = this.listing;
+    if (!l) return;
+    this.crumbsEl.replaceChildren(
+      ...crumbs(l.path).map((c, i, all) =>
+        i === all.length - 1
+          ? h('span', { class: 'ui-browse__crumb is-current', text: c.name })
+          : h('button', { class: 'ui-browse__crumb', type: 'button', on: { click: () => void this.go(c.path) } }, c.name),
+      ),
+    );
+    this.crumbsEl.scrollLeft = this.crumbsEl.scrollWidth;
+    const q = this.filter.value.trim().toLowerCase();
+    const shown = l.entries.filter((e) => (this.hiddenToggle.checked || !e.hidden) && (!q || e.name.toLowerCase().includes(q)));
+    this.list.replaceChildren(
+      ...shown.map((e) => {
+        const row = h(
+          'li',
+          { class: `ui-browse__item${e.project ? ' is-project' : ''}`, role: 'option', tabIndex: 0, attrs: { title: e.path } },
+          h('span', { class: 'ui-browse__icon', attrs: { 'aria-hidden': 'true' }, text: e.project ? '📦' : '📁' }),
+          h('span', { class: 'ui-browse__name', text: e.name }),
+          e.project ? h('span', { class: 'ui-browse__tag', text: tr('projeto') }) : null,
+          h('button', { class: 'ui-browse__pick', type: 'button', attrs: { title: tr('Usar esta pasta') }, on: { click: (ev: Event) => { ev.stopPropagation(); this.onChoose(e.path); } } }, tr('Usar')),
+        );
+        row.addEventListener('click', () => void this.go(e.path));
+        row.addEventListener('keydown', (ev: KeyboardEvent) => {
+          ev.stopPropagation();
+          if (ev.key === 'Enter') void this.go(e.path);
+        });
+        return row;
+      }),
+    );
+    if (!shown.length) this.list.append(h('li', { class: 'ui-browse__empty', text: q ? tr('Nenhuma pasta com esse nome.') : tr('Sem subpastas.') }));
+    setText(this.useBtn, tr('Usar {0}', [shortPath(l.path)]));
   }
 }

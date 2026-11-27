@@ -274,9 +274,15 @@ credenciais › Instalar certificado › Certificado de CA), conferindo a impres
 - **Novo agente** (botão **+**): começa uma sessão do Claude Code em segundo plano no computador (`claude --bg`, na
   pasta escolhida), que aparece no escritório e recebe mensagens e pedidos de permissão pelo Habblaud. Numa pasta que
   o Claude Code ainda não conhece, abre a tela de sessão nova do app do Claude preenchida, e você aperta Enter lá.
+  Escolha o projeto na lista dos recentes, digite o caminho, navegue pelas pastas do computador (**📁 Procurar
+  pasta…**, só nomes de pastas; no Docker a lista vem do `npm run codex:bridge`) ou use o **+** de um projeto no painel
+  lateral para começar um agente já nele.
   **Vem desligado:** precisa de `HABBLAUD_PTY=1` (a mesma liberação do
   [terminal interativo](#terminal-interativo-assumir-nova-sessão-e-encerrar); no Docker, ponha no `.env` e deixe o
   `npm run codex:bridge` rodando no computador) e, pelo celular, também de `spawn` no `HABBLAUD_REMOTE_ALLOW`.
+- **Anexos** (no Novo agente e na caixa de mensagem): o clipe, colar uma imagem (Cmd/Ctrl+V, ex.: uma captura de tela)
+  ou soltar arquivos. Ficam em `~/.habblaud/attachments/` no computador e o pedido ou a mensagem leva os caminhos (no
+  Docker, quem grava é o `npm run codex:bridge`).
 - **Ditado** (no Novo agente e na caixa de mensagem): precisa de `whisper-cli` e `ffmpeg` (`brew install whisper-cpp
   ffmpeg`) e de um modelo multilíngue em `~/.local/share/whisper/` (`ggml-small.bin` acerta mais que o
   `ggml-base.bin`; os `.en` só entendem inglês). Sem eles o botão Ditar não aparece. A voz não sai do computador.

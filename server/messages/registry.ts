@@ -256,6 +256,24 @@ export class MessageRegistry {
    * o motivo: subagente, saiu/concluiu, sessão sem o plugin ou Codex sem entregador) ou com mensagens demais esperando
    * (too-many). Corpo inválido: lança InvalidRequest.
    */
+  /**
+   * Por que o agente não receberia uma mensagem agora (as mesmas regras do send), ou undefined. Usado antes de gravar
+   * os anexos de uma mensagem.
+   */
+  cannotReceive(agentId: unknown): { status: number; error: string } | undefined {
+    const id = shortStr(agentId, ID_MAX);
+    const real = id ? this.opts.office.get(id) : undefined;
+    const demo = real || !id ? undefined : this.opts.demoAgent?.(id);
+    const agent = real ?? demo;
+    if (!id || !agent) return { status: 404, error: tr('agente desconhecido: ele já saiu do escritório?') };
+    const reason = unavailableReason(agent, real ? this.canMessage(id) : demo!.canMessage === true);
+    if (reason) return { status: 409, error: reason };
+    let open = 0;
+    for (const e of this.messages.values()) if (e.msg.agentId === id && !isFinal(e)) open++;
+    if (open >= MAX_OPEN) return { status: 429, error: tr('já há {0} mensagens esperando a entrega para este agente: espere a sessão buscar', [MAX_OPEN]) };
+    return undefined;
+  }
+
   send(raw: unknown): SendResult {
     const { agentId, text } = parseSend(raw);
     const real = this.opts.office.get(agentId);
