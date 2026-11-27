@@ -281,6 +281,9 @@ Install a certificate › CA certificate), checking the fingerprint the setup sh
   panel to start a new agent already in it. **It comes turned off:** it needs `HABBLAUD_PTY=1` (the same opt-in as the
   [interactive terminal](#interactive-terminal-take-over-new-session-and-end); in Docker, put it in `.env` and keep
   `npm run codex:bridge` running on the computer) and, from the phone, `spawn` in `HABBLAUD_REMOTE_ALLOW` too.
+- **Attachments** (in New agent and in the message box): the paperclip, pasting an image (Cmd/Ctrl+V, e.g. a
+  screenshot) or dropping files. They're saved in `~/.habblaud/attachments/` on the computer and the request or message
+  carries their paths (in Docker, `npm run codex:bridge` saves them).
 - **Dictation** (in New agent and in the message box): needs `whisper-cli` and `ffmpeg` (`brew install whisper-cpp
   ffmpeg`) and a multilingual model in `~/.local/share/whisper/` (`ggml-small.bin` gets more right than
   `ggml-base.bin`; the `.en` ones only understand English). Without them, the Dictate button doesn't show up. The

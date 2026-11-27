@@ -2328,7 +2328,6 @@ export const ES: Readonly<Record<string, string>> = {
   "+ Outra pasta": "+ Otra carpeta",
   "Caminho da pasta": "Ruta de la carpeta",
   "O que o agente deve fazer (opcional)": "Lo que debe hacer el agente (opcional)",
-  "Anexar imagens ou arquivos ao pedido": "Adjuntar imágenes o archivos a la solicitud",
   "Anexar": "Adjuntar",
   "Anexos": "Adjuntos",
   "Começar": "Empezar",
@@ -3298,4 +3297,14 @@ export const ES: Readonly<Record<string, string>> = {
   "o auxiliar do computador (npm run codex:bridge) não está rodando: o Docker não enxerga as pastas do computador": "el auxiliar del ordenador (npm run codex:bridge) no está en marcha: Docker no ve las carpetas del ordenador",
   "pastas demais sendo listadas: tente de novo": "demasiadas carpetas listándose: inténtalo de nuevo",
   "o computador não listou a pasta": "el ordenador no listó la carpeta",
+
+  // Anexos nas mensagens, colar e arrastar
+  "Anexar imagens ou arquivos (ou cole / arraste aqui)": "Adjuntar imágenes o archivos (o pega / arrastra aquí)",
+  "Anexo enviado pelo Habblaud:": "Adjunto enviado por Habblaud:",
+  "Anexos enviados pelo Habblaud:": "Adjuntos enviados por Habblaud:",
+  "anexos demais sendo gravados: tente de novo": "demasiados adjuntos guardándose: inténtalo de nuevo",
+  "anexos só pelo próprio computador (http://localhost)": "adjuntos solo desde este ordenador (http://localhost)",
+  "o auxiliar do computador (npm run codex:bridge) não está rodando: os anexos não têm onde ser gravados": "el auxiliar del ordenador (npm run codex:bridge) no está en marcha: los adjuntos no tienen dónde guardarse",
+  "o computador não gravou os anexos": "el ordenador no guardó los adjuntos",
+  "o computador não gravou os anexos a tempo": "el ordenador no guardó los adjuntos a tiempo",
 };

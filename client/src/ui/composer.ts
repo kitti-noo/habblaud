@@ -27,6 +27,7 @@ import type { UiContext } from './context';
 import { DictationButton, dictationAvailable, insertDictation } from './dictation';
 import { h, setAttr, setHidden, setText, setTitle } from './dom';
 import { access } from '../net/access';
+import { AttachmentTray } from './attachments';
 import { tr } from '../../../shared/i18n';
 
 export type ComposerVariant = 'drawer' | 'terminal';
@@ -65,6 +66,9 @@ export class MessageComposer {
   /** Rascunho que recebe o ditado em andamento (o agente pode mudar enquanto o Mac transcreve). */
   private dictKey = '';
   private canDictate = false;
+  /** Anexos da mensagem em preparo (do agente da caixa; trocar de agente os descarta). */
+  private tray: AttachmentTray;
+  private attachBtn: HTMLButtonElement;
 
   constructor(
     private ctx: UiContext,
@@ -102,9 +106,11 @@ export class MessageComposer {
     );
     this.dictate.el.classList.add('ui-msg__mic');
     setHidden(this.dictate.el, true);
+    this.tray = new AttachmentTray({ say: (text, error) => this.sayDictation(text, error), onChange: () => this.syncButton(), compact: true });
+    this.attachBtn = this.tray.button(true, 'ui-msg__attach');
     this.row = h('div', { class: `ui-msg__row${term ? ' ui-term__prompt ui-term__prompt--mic' : ''}` });
     if (term) this.row.append(h('span', { class: 'ui-term__caret', text: '>', attrs: { 'aria-hidden': 'true' } }));
-    this.row.append(this.box, this.dictate.el, this.sendBtn);
+    this.row.append(this.box, this.attachBtn, this.tray.input, this.dictate.el, this.sendBtn);
     // Clique na "linha do prompt" (fora do botão) põe o cursor na caixa, como num terminal.
     this.row.addEventListener('mousedown', (e) => {
       if (e.target === this.row && !this.box.disabled) {
@@ -115,7 +121,9 @@ export class MessageComposer {
     this.hint = h('p', { class: 'ui-msg__hint', hidden: true });
     this.status = h('p', { class: 'ui-msg__status', role: 'status', hidden: true, attrs: { 'aria-live': 'polite' } });
     this.tip = term ? null : h('p', { class: 'ui-msg__tip', text: composerTip() });
-    this.el = h('div', { class: `ui-msg ui-msg--${variant}` }, this.hint, this.row, this.dictStatus, this.status, this.tip);
+    this.el = h('div', { class: `ui-msg ui-msg--${variant}` }, this.hint, this.tray.list, this.row, this.dictStatus, this.status, this.tip);
+    // Colar uma imagem (Cmd/Ctrl+V) ou soltar arquivos na caixa: anexos da mensagem.
+    this.tray.wire(this.box, this.el, () => this.mode.kind === 'ready');
   }
 
   /**
@@ -142,6 +150,7 @@ export class MessageComposer {
       this.shown = shown;
       this.agentId = key;
       this.box.value = ready ? (this.drafts.get(key) ?? '') : '';
+      if (this.tray.count) this.tray.clear();
       this.box.style.height = '';
       if (ready) requestAnimationFrame(() => this.resize());
     }
@@ -153,6 +162,7 @@ export class MessageComposer {
     setTitle(this.box, ready ? '' : mode.text);
     this.row.classList.toggle('is-disabled', !ready);
     setHidden(this.sendBtn, !ready);
+    setHidden(this.attachBtn, !ready);
     // Consulta em cache (30 s): o Mac pode instalar o Whisper ou parar o auxiliar com a página aberta.
     void dictationAvailable().then((ok) => {
       if (ok === this.canDictate) return;
@@ -228,7 +238,8 @@ export class MessageComposer {
   }
 
   private syncButton(): void {
-    this.sendBtn.disabled = this.mode.kind !== 'ready' || !canSend(this.box.value) || this.states.get(this.agentId)?.phase === 'sending';
+    const has = canSend(this.box.value) || (this.tray.count > 0 && messageText(this.box.value).length <= MESSAGE_MAX);
+    this.sendBtn.disabled = this.mode.kind !== 'ready' || !has || this.states.get(this.agentId)?.phase === 'sending';
   }
 
   /** Cresce com o texto até o limite do CSS (~6 linhas; depois rola). Escondida, mede quando aparecer. */
@@ -248,12 +259,21 @@ export class MessageComposer {
   private async send(): Promise<void> {
     const agentId = this.agentId;
     const raw = this.box.value;
-    if (this.mode.kind !== 'ready' || !canSend(raw) || this.states.get(agentId)?.phase === 'sending') return;
+    const withFiles = this.tray.count > 0;
+    if (this.mode.kind !== 'ready' || !(canSend(raw) || (withFiles && messageText(raw).length <= MESSAGE_MAX)) || this.states.get(agentId)?.phase === 'sending') return;
     this.providers.set(agentId, this.provider);
     this.setState(agentId, { phase: 'sending', at: Date.now() });
     let r: { message: OutboxMessage } | { error: string };
+    let ids: string[] = [];
     try {
-      r = await this.ctx.store.sendMessage(agentId, messageText(raw));
+      if (withFiles && !this.ctx.store.mock) ids = await this.tray.upload('/api/attachments');
+    } catch (err) {
+      // Anexo recusado (grande, expirado, sem o auxiliar): o texto e os anexos continuam para tentar de novo.
+      this.setState(agentId, { phase: 'rejected', error: (err as Error).message || OFFLINE_ERROR, at: Date.now() });
+      return;
+    }
+    try {
+      r = await this.ctx.store.sendMessage(agentId, messageText(raw), ids);
     } catch {
       r = { error: OFFLINE_ERROR };
     }
@@ -262,6 +282,7 @@ export class MessageComposer {
       this.setState(agentId, { phase: 'rejected', error: r.error, at: Date.now() });
       return;
     }
+    if (withFiles && this.agentId === agentId) this.tray.clear();
     // Na fila: a caixa esvazia (a não ser que você tenha continuado a escrever enquanto o envio ia).
     if ((this.drafts.get(agentId) ?? '') === raw) {
       this.drafts.delete(agentId);

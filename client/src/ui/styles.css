@@ -11357,3 +11357,35 @@ html.is-replay #world {
 .ui-browse__use {
   justify-content: center;
 }
+
+/* Anexos na caixa de mensagem e no Novo agente (ui/attachments.ts). */
+.ui-attach--compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+}
+
+.ui-attach--compact .ui-spawn__file {
+  grid-template-columns: 28px minmax(0, 140px) auto;
+  padding: 2px 4px;
+}
+
+.ui-attach--compact .ui-spawn__thumb {
+  width: 28px;
+  height: 28px;
+}
+
+.ui-attach--compact .ui-spawn__file-size {
+  display: none;
+}
+
+.ui-attach__btn {
+  flex: none;
+  align-self: flex-end;
+}
+
+.ui-msg.is-dropping,
+.ui-spawn.is-dropping {
+  outline: 2px dashed var(--ui-accent);
+  outline-offset: 2px;
+}

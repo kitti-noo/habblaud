@@ -16,6 +16,10 @@ do meio (0.**3**.0).
   pelas pastas do computador (só nomes de pastas; as que têm cara de projeto ficam marcadas) e escolhe com um clique,
   sem digitar o caminho. No Docker quem lista as pastas é o `npm run codex:bridge`. Cada projeto do painel lateral ganha
   um **+** que abre o Novo agente já naquela pasta.
+- **Anexos nas mensagens, colar e arrastar.** A caixa de mensagem do agente ganha o clipe: imagens e arquivos vão para
+  `~/.habblaud/attachments/` no computador e a mensagem leva os caminhos no fim (dá para mandar só o anexo). Na caixa
+  de mensagem e no Novo agente, Cmd/Ctrl+V com uma imagem copiada (captura de tela) ou soltar arquivos também anexa.
+  No Docker quem grava os arquivos é o `npm run codex:bridge`.
 
 ## [1.0.3] - 2026-10-16
 

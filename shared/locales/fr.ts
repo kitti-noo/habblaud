@@ -2344,7 +2344,6 @@ export const FR: Readonly<Record<string, string>> = {
   "+ Outra pasta": "+ Autre dossier",
   "Caminho da pasta": "Chemin du dossier",
   "O que o agente deve fazer (opcional)": "Ce que l'agent doit faire (facultatif)",
-  "Anexar imagens ou arquivos ao pedido": "Joindre des images ou des fichiers à la demande",
   "Anexar": "Joindre",
   "Anexos": "Pièces jointes",
   "Começar": "Commencer",
@@ -3314,4 +3313,14 @@ export const FR: Readonly<Record<string, string>> = {
   "o auxiliar do computador (npm run codex:bridge) não está rodando: o Docker não enxerga as pastas do computador": "l'assistant de l'ordinateur (npm run codex:bridge) ne tourne pas : Docker ne voit pas les dossiers de l'ordinateur",
   "pastas demais sendo listadas: tente de novo": "trop de dossiers en cours de listage : réessayez",
   "o computador não listou a pasta": "l'ordinateur n'a pas listé le dossier",
+
+  // Anexos nas mensagens, colar e arrastar
+  "Anexar imagens ou arquivos (ou cole / arraste aqui)": "Joindre des images ou des fichiers (ou collez / glissez ici)",
+  "Anexo enviado pelo Habblaud:": "Pièce jointe envoyée par Habblaud :",
+  "Anexos enviados pelo Habblaud:": "Pièces jointes envoyées par Habblaud :",
+  "anexos demais sendo gravados: tente de novo": "trop de pièces jointes en cours d'enregistrement : réessayez",
+  "anexos só pelo próprio computador (http://localhost)": "pièces jointes uniquement depuis cet ordinateur (http://localhost)",
+  "o auxiliar do computador (npm run codex:bridge) não está rodando: os anexos não têm onde ser gravados": "l'assistant de l'ordinateur (npm run codex:bridge) ne tourne pas : les pièces jointes n'ont nulle part où être enregistrées",
+  "o computador não gravou os anexos": "l'ordinateur n'a pas enregistré les pièces jointes",
+  "o computador não gravou os anexos a tempo": "l'ordinateur n'a pas enregistré les pièces jointes à temps",
 };

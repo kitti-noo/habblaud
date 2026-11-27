@@ -19,6 +19,7 @@ import type { SpawnService } from '../spawn/spawn';
 import { ATTACHMENT_BODY_MAX, parseAttachment, type AttachmentStore } from '../spawn/attachments';
 import type { SpawnFolder } from '../spawn/folders';
 import type { FolderBrowser } from '../spawn/browse';
+import type { AttachmentWriter } from '../spawn/writer';
 import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
@@ -70,6 +71,8 @@ export interface ApiDeps {
   spawnFolders?: () => Promise<SpawnFolder[]>;
   /** "Procurar pasta" do Novo agente (GET /api/spawn/browse; /api/host/browse/* para o auxiliar do host; spawn/browse.ts). */
   browser?: FolderBrowser;
+  /** Grava os anexos das mensagens (e, para o auxiliar do host, /api/host/attachments/*; spawn/writer.ts). */
+  attachmentWriter?: AttachmentWriter;
   /** Anexos do "Novo agente" (POST /api/spawn/attachments; spawn/attachments.ts). */
   attachments?: AttachmentStore;
   /** Ditado (/api/dictation e, para o auxiliar do host, /api/host/dictation/*; dictation/dictation.ts). */
@@ -492,6 +495,24 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       } else handleCodexEvent(req, res, { live: deps.codexLive, entries: () => accounts.entriesOf('codex') }).catch((err) => fail(res, err));
       return true;
     }
+    if (path === '/api/attachments') {
+      // Anexos das mensagens (caixa de mensagem): a mesma trava das mensagens (ou a do Novo agente).
+      const store = deps.attachments;
+      if (method !== 'POST') methodNotAllowed(res, 'POST');
+      else if (!store || !deps.attachmentWriter) sendJson(res, 403, { error: tr('anexos desligados') });
+      else if (!trusted(req, 'messages') && !trusted(req, 'spawn')) sendJson(res, 403, { error: denied(req, tr('anexos só pelo próprio computador (http://localhost)')) });
+      else
+        readJson(req, ATTACHMENT_BODY_MAX)
+          .then((body) => {
+            const a = parseAttachment(body);
+            if ('error' in a) return sendJson(res, 400, { error: a.error });
+            const r = store.put(a);
+            if ('error' in r) return sendJson(res, 429, { error: r.error });
+            sendJson(res, 201, { id: r.id, name: a.name, size: a.data.length });
+          })
+          .catch((err) => fail(res, err));
+      return true;
+    }
     if (path === '/api/spawn' || path.startsWith('/api/spawn/')) {
       // Abre uma sessão nova no app do Claude: roda código no computador, então a mesma trava das mensagens.
       const spawn = deps.spawn;
@@ -618,6 +639,26 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         readJson(req, 512 * 1024)
           .then((body) => {
             dictation.ack(body);
+            sendJson(res, 200, { ok: true });
+          })
+          .catch((err) => fail(res, err));
+      }
+      return true;
+    }
+    if (path === '/api/host/attachments/poll' || path === '/api/host/attachments/ack') {
+      // Só o auxiliar do host, pela porta local (nunca pela remota); fora do Docker, só pelo loopback.
+      const writer = deps.attachmentWriter;
+      if (method !== 'POST') methodNotAllowed(res, 'POST');
+      else if (!writer) sendJson(res, 403, { error: tr('anexos desligados') });
+      else if (!trusted(req) || (!deps.inDocker && !isLoopbackAddress(req.socket.remoteAddress))) {
+        sendJson(res, 403, { error: denied(req, tr('só o auxiliar do próprio computador')) });
+      } else if (path === '/api/host/attachments/poll') {
+        req.resume();
+        hostWait(res, url, (ms, signal) => writer.pollWait(ms, signal)).then((list) => list && sendJson(res, 200, { writes: list }), (err) => fail(res, err));
+      } else {
+        readJson(req, 256 * 1024)
+          .then((body) => {
+            writer.ack(body);
             sendJson(res, 200, { ok: true });
           })
           .catch((err) => fail(res, err));

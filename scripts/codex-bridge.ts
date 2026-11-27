@@ -323,6 +323,54 @@ export async function filesRound(
 }
 
 /**
+ * Anexos das mensagens: busca os arquivos (POST /api/host/attachments/poll), grava cada lote numa pasta nova de
+ * ~/.habblaud/attachments/ (writeAttachments: nomes seguros, pasta 700, arquivos 600) e devolve os caminhos em
+ * /api/host/attachments/ack. Nunca lança.
+ */
+export async function attachmentsRound(
+  post: Post,
+  write: (id: string, files: Attachment[]) => string[] = (id, files) => writeAttachments(attachmentsRoot(), id, files),
+  opts: { wait?: boolean } = {},
+): Promise<RoundResult> {
+  const polled = await post(`/api/host/attachments/poll${opts.wait ? '?wait=1' : ''}`, {});
+  if (!polled) return { state: 'down' };
+  const list = rec(polled.json)?.writes;
+  if (polled.status !== 200 || !Array.isArray(list)) return { state: 'refused', status: polled.status };
+  const results: Array<{ id: string; ok: boolean; paths?: string[]; error?: string }> = [];
+  for (const raw of list) {
+    const r = rec(raw);
+    const id = typeof r?.id === 'string' ? r.id : '';
+    if (!id) continue;
+    const files: Attachment[] = [];
+    let bad = '';
+    for (const f of Array.isArray(r?.files) ? r.files.slice(0, ATTACHMENTS_PER_SPAWN) : []) {
+      const x = rec(f);
+      if (typeof x?.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(x.data)) {
+        bad = tr('anexo ilegível');
+        break;
+      }
+      const data = Buffer.from(x.data, 'base64');
+      if (!data.length || data.length > ATTACHMENT_MAX_BYTES) {
+        bad = tr('anexo vazio ou grande demais');
+        break;
+      }
+      files.push({ name: safeFileName(typeof x.name === 'string' ? x.name : ''), type: typeof x.type === 'string' ? x.type : 'application/octet-stream', data });
+    }
+    if (bad || !files.length) {
+      results.push({ id, ok: false, error: bad || tr('anexo vazio ou grande demais') });
+      continue;
+    }
+    try {
+      results.push({ id, ok: true, paths: write(id, files) });
+    } catch (err) {
+      results.push({ id, ok: false, error: tr('não deu para gravar os anexos ({0})', [(err as Error).message]).slice(0, 300) });
+    }
+  }
+  if (results.length) await post('/api/host/attachments/ack', { results });
+  return { state: 'ok', results: results.map(({ id, ok, error }) => ({ id, ok, ...(error ? { error } : {}) })) };
+}
+
+/**
  * Procurar pasta (Novo agente): busca as pastas pedidas (POST /api/host/browse/poll), lista só as subpastas de cada uma
  * (nunca arquivos nem conteúdo) e devolve em /api/host/browse/ack. Nunca lança.
  */
@@ -392,6 +440,7 @@ async function main(): Promise<void> {
     const inside = (p: string) => insideKnownFolder(p, { accountDirs, roots });
     void waitLoop(() => filesRound(waitPost, log, undefined, undefined, { inside, wait: true }));
     void waitLoop(() => browseRound(waitPost, undefined, { wait: true }));
+    void waitLoop(() => attachmentsRound(waitPost, undefined, { wait: true }));
     if (transcribe) {
       const t = transcribe;
       void waitLoop(() => dictationRound(waitPost, t, log, { wait: true }));
